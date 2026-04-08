@@ -1,6 +1,7 @@
 import express from "express";
 import { pool } from "./config/db.js";
 import departmentRoutes from "./routes/departmentRoutes.js";
+import courseRoutes from "./routes/courseRoutes.js";
 
 const app = express();
 
@@ -11,6 +12,7 @@ app.get("/", (req, res) => {
 });
 
 app.use("/api/v1/departments", departmentRoutes);
+app.use("/api/v1/courses", courseRoutes);
 
 // error handling middleware
 app.use((err, req, res, next) => {
