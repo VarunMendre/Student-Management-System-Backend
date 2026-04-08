@@ -8,7 +8,7 @@ const app = express();
 app.use(express.json());
 
 app.get("/", (req, res) => {
-    res.send("PostgreSQL + Express API is running");
+    res.send("PostgreSQL + Express API is running Hello World!");
 });
 
 app.use("/api/v1/departments", departmentRoutes);
