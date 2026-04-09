@@ -8,6 +8,14 @@ export const getAllDepartments = asyncHandler(async (req, res, next) => {
     successResponse(res, departments, "Departments fetched successfully");
 });
 
+export const getDepartmentById = asyncHandler(async (req, res, next) => {
+    const department = await departmentService.getDepartmentById(req.params.id);
+    if (!department) {
+        throw new CustomError("Department not found", 404);
+    }
+    successResponse(res, department, "Department fetched successfully");
+})
+
 export const createDepartment = asyncHandler(async (req, res, next) => {
     const { name } = req.body;
 
