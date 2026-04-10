@@ -8,14 +8,6 @@ CREATE TABLE IF NOT EXISTS departments (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Students Table
-CREATE TABLE IF NOT EXISTS students (
-    id SERIAL PRIMARY KEY,
-    name VARCHAR(100) NOT NULL,
-    email VARCHAR(100) UNIQUE NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
 -- Courses Table
 CREATE TABLE IF NOT EXISTS courses (
     id SERIAL PRIMARY KEY,
@@ -49,9 +41,79 @@ CREATE TABLE IF NOT EXISTS course_fees (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Students Table (Enrollment Record)
+CREATE TABLE IF NOT EXISTS students (
+    id                  SERIAL PRIMARY KEY,
+    full_name           VARCHAR(150) NOT NULL,
+    email               VARCHAR(150) UNIQUE NOT NULL,
+    mobile_number       VARCHAR(15) NOT NULL,
+    alternate_number    VARCHAR(15) NOT NULL,
+    prn_number          VARCHAR(50) DEFAULT NULL,
+    eligibility_number  VARCHAR(50) DEFAULT NULL,
+    department_id       INTEGER NOT NULL REFERENCES departments(id),
+    course_id           INTEGER NOT NULL REFERENCES courses(id),
+    batch_id            INTEGER NOT NULL REFERENCES course_batches(id),
+    caste_category      VARCHAR(50) NOT NULL,
+    gender              VARCHAR(10) NOT NULL CHECK (gender IN ('Male', 'Female', 'Other')),
+    enrollment_status   VARCHAR(20) DEFAULT 'Active' CHECK (enrollment_status IN ('Active', 'Inactive', 'Graduated', 'Dropped')),
+    enrolled_at         TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Student Fee Ledger (One row per academic year per student)
+CREATE TABLE IF NOT EXISTS student_fee_ledger (
+    id                  SERIAL PRIMARY KEY,
+    student_id          INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+    academic_year       VARCHAR(20) NOT NULL,
+    academic_year_num   INTEGER NOT NULL,
+    total_yearly_fee    DECIMAL(10,2) NOT NULL,
+    total_paid          DECIMAL(10,2) DEFAULT 0.00,
+    pending_fee         DECIMAL(10,2) GENERATED ALWAYS AS (total_yearly_fee - total_paid) STORED,
+    status              VARCHAR(20) DEFAULT 'Pending' CHECK (status IN ('Pending', 'Partial', 'Paid')),
+    created_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(student_id, academic_year_num)
+);
+
+-- Fee Transactions (Immutable payment audit trail)
+CREATE TABLE IF NOT EXISTS fee_transactions (
+    id                  SERIAL PRIMARY KEY,
+    student_id          INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+    ledger_id           INTEGER NOT NULL REFERENCES student_fee_ledger(id) ON DELETE CASCADE,
+    amount_paid         DECIMAL(10,2) NOT NULL CHECK (amount_paid > 0),
+    payment_mode        VARCHAR(30) NOT NULL CHECK (payment_mode IN ('Cash', 'UPI', 'Bank Transfer', 'Cheque', 'DD', 'Online')),
+    payment_reference   VARCHAR(100) DEFAULT NULL,
+    receipt_number      VARCHAR(50) UNIQUE NOT NULL,
+    remarks             VARCHAR(255) DEFAULT NULL,
+    transaction_date    DATE NOT NULL DEFAULT CURRENT_DATE,
+    created_by          VARCHAR(100) DEFAULT NULL,
+    created_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ============================================
 -- Indexes for performance
+-- ============================================
+
+-- Existing indexes
 CREATE INDEX IF NOT EXISTS idx_courses_dept ON courses(department_id);
 CREATE INDEX IF NOT EXISTS idx_courses_created ON courses(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_departments_created ON departments(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_batches_course ON course_batches(course_id);
 CREATE INDEX IF NOT EXISTS idx_fees_batch ON course_fees(batch_id);
+
+-- Student indexes
+CREATE INDEX IF NOT EXISTS idx_students_department ON students(department_id);
+CREATE INDEX IF NOT EXISTS idx_students_course ON students(course_id);
+CREATE INDEX IF NOT EXISTS idx_students_batch ON students(batch_id);
+CREATE INDEX IF NOT EXISTS idx_students_email ON students(email);
+CREATE INDEX IF NOT EXISTS idx_students_status ON students(enrollment_status);
+
+-- Fee ledger indexes
+CREATE INDEX IF NOT EXISTS idx_ledger_student ON student_fee_ledger(student_id);
+CREATE INDEX IF NOT EXISTS idx_ledger_status ON student_fee_ledger(status);
+
+-- Transaction indexes
+CREATE INDEX IF NOT EXISTS idx_txn_student ON fee_transactions(student_id);
+CREATE INDEX IF NOT EXISTS idx_txn_ledger ON fee_transactions(ledger_id);
+CREATE INDEX IF NOT EXISTS idx_txn_date ON fee_transactions(transaction_date DESC);
+CREATE INDEX IF NOT EXISTS idx_txn_receipt ON fee_transactions(receipt_number);

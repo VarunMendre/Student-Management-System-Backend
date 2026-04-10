@@ -15,15 +15,22 @@ export const validate = (schema) => (req, res, next) => {
         });
 
         if (!result.success) {
-            // Extract the first error message for simplicity, or join multiple
-            const errorMsg = result.error.errors.map(err => err.message).join(", ");
+            // Safely extract the error message from Zod issues
+            const errorMsg = result.error.issues 
+                ? result.error.issues.map(err => `${err.path.join('.')}: ${err.message}`).join(", ")
+                : "Validation failed";
             throw new CustomError(errorMsg, 400);
         }
 
         // Update req objects with parsed/refined data
-        req.body = result.data.body;
-        req.params = result.data.params;
-        req.query = result.data.query;
+        if (result.data.body) req.body = result.data.body;
+        if (result.data.params) Object.assign(req.params, result.data.params);
+        // Express 5: req.query is read-only, so merge parsed values onto it
+        if (result.data.query) {
+            Object.keys(result.data.query).forEach(key => {
+                req.query[key] = result.data.query[key];
+            });
+        }
 
         next();
     } catch (err) {

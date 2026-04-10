@@ -3,6 +3,7 @@ import { pool } from "./config/db.js";
 import departmentRoutes from "./routes/departmentRoutes.js";
 import courseRoutes from "./routes/courseRoutes.js";
 import batchRoutes from "./routes/batchRoutes.js";
+import studentRoutes from "./routes/studentRoutes.js";
 
 const app = express();
 
@@ -15,6 +16,7 @@ app.get("/", (req, res) => {
 app.use("/api/v1/departments", departmentRoutes);
 app.use("/api/v1/courses", courseRoutes);
 app.use("/api/v1/batches", batchRoutes);
+app.use("/api/v1/students", studentRoutes);
 
 // error handling middleware
 app.use((err, req, res, next) => {
