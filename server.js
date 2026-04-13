@@ -4,7 +4,6 @@ import departmentRoutes from "./routes/departmentRoutes.js";
 import courseRoutes from "./routes/courseRoutes.js";
 import batchRoutes from "./routes/batchRoutes.js";
 import studentRoutes from "./routes/studentRoutes.js";
-import cors from 'cors';
 
 import scholarshipRoutes from "./routes/scholarshipRoutes.js";
 

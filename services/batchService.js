@@ -1,5 +1,6 @@
 import batchModel from "../models/batchModel.js";
 import { withTransaction } from "../utils/dbUtils.js";
+import { pool } from "../config/db.js";
 
 const createBatch = async (batchData) => {
     return await batchModel.create(batchData);

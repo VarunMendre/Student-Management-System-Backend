@@ -20,7 +20,7 @@ export const getCourseById = asyncHandler(async (req, res) => {
 });
 
 export const createCourse = asyncHandler(async (req, res) => {
-    const { course_name, duration, department_id, course_code, program_level, seats } = req.body;
+    const { course_name, duration, department_id, course_code, program_level } = req.body;
 
     if (!course_name || !department_id || !course_code) {
         throw new CustomError("Course name, department ID, and course code are required", 400);
@@ -31,8 +31,7 @@ export const createCourse = asyncHandler(async (req, res) => {
         duration,
         department_id,
         course_code,
-        program_level,
-        seats
+        program_level
     });
 
     successResponse(res, newCourse, "Course created successfully", 201);
@@ -40,15 +39,14 @@ export const createCourse = asyncHandler(async (req, res) => {
 
 export const updateCourse = asyncHandler(async (req, res) => {
     const { id } = req.params;
-    const { course_name, duration, department_id, course_code, program_level, seats } = req.body;
+    const { course_name, duration, department_id, course_code, program_level } = req.body;
 
     const updatedCourse = await courseService.updateCourse(id, {
         course_name,
         duration,
         department_id,
         course_code,
-        program_level,
-        seats
+        program_level
     });
 
     if (!updatedCourse) {

@@ -4,7 +4,7 @@ import { z } from "zod";
 const idRegex = /^\d+$/;
 const batchNameRegex = /^[0-9]{4}\s*\-\s*[0-9]{4}$/; // e.g., "2025 - 2029"
 const yearRegex = /^\d{4}$/;
-const componentNameRegex = /^[a-zA-Z\s]{2,100}$/;
+const componentNameRegex = /^[a-zA-Z0-9\s\-_]{2,100}$/;
 const amountRegex = /^\d+(\.\d{1,2})?$/;
 
 export const batchSchemas = {
