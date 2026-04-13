@@ -1,0 +1,2 @@
+"id","full_name","email","mobile_number","alternate_number","prn_number","eligibility_number","department_id","course_id","batch_id","caste_category","gender","enrollment_status","enrolled_at","updated_at"
+1,"Varun Mendre","varun.mendre@example.com","9876543210","9123456789","PRN12345",NULL,1,9,2,"OBC","Male","Active","2026-04-10 13:21:33.385456","2026-04-10 13:45:47.130428"

@@ -1,39 +1,25 @@
-import { pool } from "../config/db.js";
+import departmentModel from "../models/departmentModel.js";
 
 const getAllDepartments = async () => {
-    const { rows } = await pool.query("SELECT * FROM departments ORDER BY created_at DESC");
-    return rows;
+    return await departmentModel.findAll();
 };
 
 const getDepartmentById = async (id) => {
-    const { rows } = await pool.query("SELECT * FROM departments WHERE id = $1", [id]);
-    return rows[0];
+    return await departmentModel.findById(id);
 };
 
 const createDepartment = async (departmentData) => {
     const { name } = departmentData;
-    const { rows } = await pool.query(
-        "INSERT INTO departments (name) VALUES ($1) RETURNING *",
-        [name]
-    );
-    return rows[0];
+    return await departmentModel.create(name);
 };
 
 const updateDepartment = async (id, departmentData) => {
     const { name } = departmentData;
-    const { rows } = await pool.query(
-        "UPDATE departments SET name = $1 WHERE id = $2 RETURNING *",
-        [name, id]
-    );
-    return rows[0];
+    return await departmentModel.update(id, name);
 };
 
 const deleteDepartment = async (id) => {
-    const { rows } = await pool.query(
-        "DELETE FROM departments WHERE id = $1 RETURNING *",
-        [id]
-    );
-    return rows[0];
+    return await departmentModel.remove(id);
 };
 
 export default {

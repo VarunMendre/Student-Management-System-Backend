@@ -81,13 +81,27 @@ CREATE TABLE IF NOT EXISTS fee_transactions (
     student_id          INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,
     ledger_id           INTEGER NOT NULL REFERENCES student_fee_ledger(id) ON DELETE CASCADE,
     amount_paid         DECIMAL(10,2) NOT NULL CHECK (amount_paid > 0),
-    payment_mode        VARCHAR(30) NOT NULL CHECK (payment_mode IN ('Cash', 'UPI', 'Bank Transfer', 'Cheque', 'DD', 'Online')),
+    payment_mode        VARCHAR(30) NOT NULL CHECK (payment_mode IN ('Cash', 'UPI', 'Bank Transfer', 'Cheque', 'DD', 'Online', 'Scholarship')),
     payment_reference   VARCHAR(100) DEFAULT NULL,
     receipt_number      VARCHAR(50) UNIQUE NOT NULL,
     remarks             VARCHAR(255) DEFAULT NULL,
+    application_id      VARCHAR(100) DEFAULT NULL,
+    installment_no      INTEGER DEFAULT NULL,
+    status              VARCHAR(20) DEFAULT 'Active' CHECK (status IN ('Active', 'Reversed')),
     transaction_date    DATE NOT NULL DEFAULT CURRENT_DATE,
     created_by          VARCHAR(100) DEFAULT NULL,
     created_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Scholarship Configurations
+CREATE TABLE IF NOT EXISTS course_scholarship_config (
+    id SERIAL PRIMARY KEY,
+    course_id INTEGER REFERENCES courses(id) ON DELETE CASCADE,
+    caste_category VARCHAR(50) NOT NULL,
+    gender VARCHAR(10) NOT NULL CHECK (gender IN ('Male', 'Female')),
+    max_amount DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
+    is_active BOOLEAN DEFAULT TRUE,
+    UNIQUE(course_id, caste_category, gender)
 );
 
 -- ============================================
@@ -117,3 +131,10 @@ CREATE INDEX IF NOT EXISTS idx_txn_student ON fee_transactions(student_id);
 CREATE INDEX IF NOT EXISTS idx_txn_ledger ON fee_transactions(ledger_id);
 CREATE INDEX IF NOT EXISTS idx_txn_date ON fee_transactions(transaction_date DESC);
 CREATE INDEX IF NOT EXISTS idx_txn_receipt ON fee_transactions(receipt_number);
+CREATE INDEX IF NOT EXISTS idx_txn_status ON fee_transactions(status);
+CREATE INDEX IF NOT EXISTS idx_txn_application_id ON fee_transactions(application_id);
+
+-- Prevent duplicate scholarship disbursals
+CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_scholarship_disbursal 
+ON fee_transactions (student_id, application_id, installment_no) 
+WHERE (payment_mode = 'Scholarship' AND application_id IS NOT NULL AND installment_no IS NOT NULL);
