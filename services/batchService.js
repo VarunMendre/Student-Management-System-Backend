@@ -53,4 +53,24 @@ const getBatchWithFees = async (batchId) => {
     };
 };
 
-export default { createBatch, updateBatchFees, getBatchWithFees };
+const getAllBatches = async (courseId) => {
+    let query = `
+        SELECT cb.*, c.course_name, d.name as department_name,
+               COALESCE(SUM(cf.amount), 0) as total_fee
+        FROM course_batches cb
+        JOIN courses c ON cb.course_id = c.id
+        JOIN departments d ON c.department_id = d.id
+        LEFT JOIN course_fees cf ON cb.id = cf.batch_id
+    `;
+    const params = [];
+    if (courseId) {
+        query += " WHERE cb.course_id = $1";
+        params.push(courseId);
+    }
+    query += " GROUP BY cb.id, c.course_name, d.name ORDER BY cb.admission_year DESC";
+    
+    const { rows } = await pool.query(query, params);
+    return rows;
+};
+
+export default { createBatch, updateBatchFees, getBatchWithFees, getAllBatches };

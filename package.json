@@ -19,6 +19,7 @@
   },
   "homepage": "https://github.com/VarunMendre/Student-Management-System-Backend#readme",
   "dependencies": {
+    "cors": "^2.8.6",
     "dotenv": "^17.4.1",
     "express": "^5.2.1",
     "pg": "^8.13.3",
