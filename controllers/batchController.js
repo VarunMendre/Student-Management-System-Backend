@@ -30,3 +30,9 @@ export const getBatchWithFees = asyncHandler(async (req, res, next) => {
 
     successResponse(res, batch, "Batch with fees fetched successfully");
 });
+
+export const listBatches = asyncHandler(async (req, res, next) => {
+    const { course_id } = req.query;
+    const batches = await batchService.getAllBatches(course_id);
+    successResponse(res, { data: batches }, "Batches fetched successfully");
+});
