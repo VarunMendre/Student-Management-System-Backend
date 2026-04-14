@@ -75,4 +75,12 @@ const getFeeLedger = async (studentId) => {
     };
 };
 
-export default { createPayment, getTransactions, getTransactionById, getFeeLedger };
+const getAllTransactions = async (filters = {}) => {
+    const rows = await paymentModel.findAllTransactions(filters);
+    return rows.map(row => ({ 
+        ...row, 
+        paidAmount: parseFloat(row.paidAmount || 0) 
+    }));
+};
+
+export default { createPayment, getTransactions, getTransactionById, getFeeLedger, getAllTransactions };

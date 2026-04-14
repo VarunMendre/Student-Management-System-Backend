@@ -21,3 +21,8 @@ export const getFeeLedger = asyncHandler(async (req, res, next) => {
     const ledger = await paymentService.getFeeLedger(parseInt(req.params.id));
     successResponse(res, ledger, "Fee ledger fetched successfully");
 });
+
+export const listAllTransactions = asyncHandler(async (req, res, next) => {
+    const transactions = await paymentService.getAllTransactions(req.query);
+    successResponse(res, { data: transactions }, "All transactions fetched successfully");
+});

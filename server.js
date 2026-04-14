@@ -4,8 +4,8 @@ import departmentRoutes from "./routes/departmentRoutes.js";
 import courseRoutes from "./routes/courseRoutes.js";
 import batchRoutes from "./routes/batchRoutes.js";
 import studentRoutes from "./routes/studentRoutes.js";
-
 import scholarshipRoutes from "./routes/scholarshipRoutes.js";
+import transactionRoutes from "./routes/transactionRoutes.js";
 
 const app = express();
 app.use(cors({
@@ -26,6 +26,7 @@ app.use("/api/v1/courses", courseRoutes);
 app.use("/api/v1/batches", batchRoutes);
 app.use("/api/v1/students", studentRoutes);
 app.use("/api/v1/scholarship", scholarshipRoutes);
+app.use("/api/v1/transactions", transactionRoutes);
 
 // error handling middleware
 app.use((err, req, res, next) => {

@@ -13,7 +13,7 @@ const insertTransaction = async (client, data) => {
     const res = await client.query(
         `INSERT INTO fee_transactions (student_id, ledger_id, amount_paid, payment_mode, payment_reference, receipt_number, remarks, transaction_date, created_by)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-         RETURNING id, receipt_number, amount_paid, payment_mode, payment_reference, transaction_date, remarks, created_at`,
+         RETURNING id, receipt_number, amount_paid, payment_mode, payment_reference, TO_CHAR(transaction_date, 'YYYY-MM-DD') as transaction_date, remarks, created_at`,
         [studentId, ledger_id, amount_paid, payment_mode, payment_reference, receiptNumber, remarks, transaction_date || new Date().toISOString().slice(0, 10), null]
     );
     return res.rows[0];
@@ -35,7 +35,8 @@ const findTransactionsByStudent = async (studentId, yearNum) => {
         SELECT 
             ft.id, ft.amount_paid, ft.payment_mode, ft.payment_reference,
             ft.receipt_number, sfl.academic_year, ft.remarks,
-            ft.transaction_date, ft.created_at, ft.status
+            TO_CHAR(ft.transaction_date, 'YYYY-MM-DD') as transaction_date, 
+            ft.created_at, ft.status
         FROM fee_transactions ft
         JOIN student_fee_ledger sfl ON ft.ledger_id = sfl.id
         WHERE ft.student_id = $1
@@ -58,7 +59,8 @@ const findTransactionWithDetails = async (txnId, studentId) => {
             c.course_name, cb.batch_name,
             sfl.academic_year,
             ft.amount_paid, ft.payment_mode, ft.payment_reference,
-            ft.transaction_date, ft.remarks, ft.created_by, ft.created_at
+            TO_CHAR(ft.transaction_date, 'YYYY-MM-DD') as transaction_date, 
+            ft.remarks, ft.created_by, ft.created_at
          FROM fee_transactions ft
          JOIN students s ON ft.student_id = s.id
          JOIN courses c ON s.course_id = c.id
@@ -92,6 +94,37 @@ const getStudentWithCourse = async (studentId) => {
     return res.rows[0];
 };
 
+const findAllTransactions = async (params = {}) => {
+    let query = `
+        SELECT 
+            ft.id, ft.student_id as "studentId", ft.amount_paid as "paidAmount", ft.payment_mode as "paymentMode", ft.payment_reference as "referenceNo",
+            ft.receipt_number as "receiptNo", TO_CHAR(ft.transaction_date, 'YYYY-MM-DD') as "date", ft.remarks, ft.created_at as "createdAt", ft.created_by as "recordedBy",
+            s.full_name as "studentName", c.course_name as "courseName", cb.batch_name as "batchName", sfl.academic_year as "year"
+        FROM fee_transactions ft
+        JOIN students s ON ft.student_id = s.id
+        JOIN courses c ON s.course_id = c.id
+        JOIN course_batches cb ON s.batch_id = cb.id
+        JOIN student_fee_ledger sfl ON ft.ledger_id = sfl.id
+        WHERE 1=1
+    `;
+    const values = [];
+    let i = 1;
+
+    if (params.date) {
+        query += ` AND ft.transaction_date = $${i++}`;
+        values.push(params.date);
+    }
+
+    if (params.startDate && params.endDate) {
+        query += ` AND ft.transaction_date BETWEEN $${i++} AND $${i++}`;
+        values.push(params.startDate, params.endDate);
+    }
+
+    query += ` ORDER BY ft.created_at DESC`;
+    const { rows } = await pool.query(query, values);
+    return rows;
+};
+
 export default {
     findLedgerById,
     insertTransaction,
@@ -99,5 +132,6 @@ export default {
     findTransactionsByStudent,
     findTransactionWithDetails,
     findFullLedgerByStudent,
-    getStudentWithCourse
+    getStudentWithCourse,
+    findAllTransactions
 };
