@@ -5,7 +5,7 @@ const idRegex = /^\d+$/;
 const phoneRegex = /^\d{10,15}$/;
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-const casteCategories = ["General", "OBC", "SC", "ST", "VJNT", "SBC", "NT-A", "NT-B", "NT-C", "NT-D"];
+const casteCategories = ["General", "EWS", "OBC", "SC", "ST", "VJA", "NTB", "NTC", "NTD", "SBC", "SEBC", "VJNT", "NT-A", "NT-B", "NT-C", "NT-D"];
 const genderOptions = ["Male", "Female", "Other"];
 const statusOptions = ["Active", "Inactive", "Graduated", "Dropped"];
 

@@ -23,8 +23,10 @@ const enrollStudent = async (data) => {
     const enrolledCount = await studentModel.getEnrolledCount(batch_id);
     if (enrolledCount >= batch.total_seats) throw new CustomError("Batch full", 409);
 
-    const yearlyFee = await studentModel.getBatchYearlyFee(batch_id);
-    if (yearlyFee <= 0) throw new CustomError("No fee components configured", 400);
+    const batchFees = await studentModel.getBatchFeesByYear(batch_id);
+    const totalCourseFee = Object.values(batchFees).reduce((sum, f) => sum + f, 0);
+
+    if (totalCourseFee <= 0) throw new CustomError("No fee components configured for this batch", 400);
 
     const yearLabels = getAcademicYearLabels(batch.duration);
     
@@ -32,8 +34,10 @@ const enrollStudent = async (data) => {
         const student = await studentModel.createStudent(client, data);
         const ledgerRows = [];
         for (let i = 0; i < yearLabels.length; i++) {
+            const yr = yearLabels[i];
+            const yearlyFee = batchFees[yr] || 0;
             const row = await studentModel.createFeeLedger(client, {
-                student_id: student.id, academic_year: yearLabels[i], academic_year_num: i + 1, total_yearly_fee: yearlyFee
+                student_id: student.id, academic_year: yr, academic_year_num: i + 1, total_yearly_fee: yearlyFee
             });
             ledgerRows.push(row);
         }
@@ -41,7 +45,8 @@ const enrollStudent = async (data) => {
             ...student,
             department_name: batch.department_name, course_name: batch.course_name, batch_name: batch.batch_name,
             fee_summary: {
-                total_course_fee: yearlyFee * yearLabels.length, yearly_fee: yearlyFee, years: yearLabels.length,
+                total_course_fee: totalCourseFee, 
+                years: yearLabels.length,
                 ledger: ledgerRows.map(row => ({
                     ...row, total_yearly_fee: parseFloat(row.total_yearly_fee), total_paid: parseFloat(row.total_paid), pending_fee: parseFloat(row.pending_fee)
                 }))
@@ -58,16 +63,31 @@ const listStudents = async (filters = {}) => {
     let query = `
         SELECT 
             s.id, s.full_name, s.email, s.mobile_number, s.prn_number,
+            s.department_id, s.course_id, s.batch_id,
             d.name as department_name, c.course_name, cb.batch_name,
             s.caste_category, s.gender, s.enrollment_status,
-            COALESCE(SUM(sfl.total_yearly_fee), 0) as total_course_fee,
-            COALESCE(SUM(sfl.total_paid), 0) as total_paid,
-            COALESCE(SUM(sfl.pending_fee), 0) as total_pending
+            COALESCE(ledger.total_course_fee, 0) as total_course_fee,
+            COALESCE(ledger.total_paid, 0) as total_paid,
+            COALESCE(ledger.total_pending, 0) as total_pending,
+            COALESCE(tx.transaction_count, 0) as transaction_count
         FROM students s
         JOIN departments d ON s.department_id = d.id
         JOIN courses c ON s.course_id = c.id
         JOIN course_batches cb ON s.batch_id = cb.id
-        LEFT JOIN student_fee_ledger sfl ON s.id = sfl.student_id
+        LEFT JOIN (
+            SELECT student_id, 
+                   SUM(total_yearly_fee) as total_course_fee, 
+                   SUM(total_paid) as total_paid,
+                   SUM(pending_fee) as total_pending
+            FROM student_fee_ledger 
+            GROUP BY student_id
+        ) ledger ON s.id = ledger.student_id
+        LEFT JOIN (
+            SELECT student_id, COUNT(id) as transaction_count 
+            FROM fee_transactions 
+            WHERE status = 'Active'
+            GROUP BY student_id
+        ) tx ON s.id = tx.student_id
     `;
 
     const conditions = [];
@@ -85,14 +105,15 @@ const listStudents = async (filters = {}) => {
     }
 
     if (conditions.length > 0) query += " WHERE " + conditions.join(" AND ");
-    query += ` GROUP BY s.id, d.name, c.course_name, cb.batch_name ORDER BY s.enrolled_at DESC`;
+    query += ` ORDER BY s.enrolled_at DESC`;
 
     const rows = await studentModel.listAll(query, values);
     return rows.map(row => ({
         ...row,
         total_course_fee: parseFloat(row.total_course_fee),
         total_paid: parseFloat(row.total_paid),
-        total_pending: parseFloat(row.total_pending)
+        total_pending: parseFloat(row.total_pending),
+        transaction_count: parseInt(row.transaction_count)
     }));
 };
 

@@ -30,7 +30,11 @@ const createPayment = async (studentId, data) => {
         const updatedLedger = await paymentModel.updateLedgerTotalPaid(client, ledger_id, newTotalPaid, status);
 
         return {
-            transaction: { ...transaction, amount_paid: parseFloat(transaction.amount_paid) },
+            transaction: { 
+                ...transaction, 
+                amount_paid: parseFloat(transaction.amount_paid),
+                amount_in_words: amountToWords(parseFloat(transaction.amount_paid))
+            },
             updated_ledger: { ...updatedLedger, total_yearly_fee: parseFloat(updatedLedger.total_yearly_fee), total_paid: parseFloat(updatedLedger.total_paid), pending_fee: parseFloat(updatedLedger.pending_fee) }
         };
     }).catch(error => {

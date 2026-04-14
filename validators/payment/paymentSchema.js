@@ -4,7 +4,7 @@ import { z } from "zod";
 const idRegex = /^\d+$/;
 const dateRegex = /^\d{4}-\d{2}-\d{2}$/; // YYYY-MM-DD
 
-const paymentModes = ["Cash", "UPI", "Bank Transfer", "Cheque", "DD", "Online"];
+const paymentModes = ["Cash", "UPI", "Cheque", "DD", "Online", "NEFT", "RTGS"];
 
 export const paymentSchemas = {
     // Schema for POST /api/v1/students/:id/payments

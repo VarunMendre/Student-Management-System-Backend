@@ -26,12 +26,17 @@ const getEnrolledCount = async (batchId) => {
     return parseInt(res.rows[0].enrolled);
 };
 
-const getBatchYearlyFee = async (batchId) => {
+const getBatchFeesByYear = async (batchId) => {
     const res = await pool.query(
-        "SELECT COALESCE(SUM(amount), 0) as total_fee FROM course_fees WHERE batch_id = $1",
+        "SELECT component_name, amount FROM course_fees WHERE batch_id = $1",
         [batchId]
     );
-    return parseFloat(res.rows[0].total_fee);
+    const fees = {};
+    res.rows.forEach(r => {
+        const year = r.component_name.split(' - ')[0]; // Extract "FY", "SY", etc.
+        fees[year] = (fees[year] || 0) + parseFloat(r.amount);
+    });
+    return fees;
 };
 
 const createStudent = async (client, data) => {
@@ -122,7 +127,7 @@ export default {
     getBatchWithDetails,
     getCourseDeptId,
     getEnrolledCount,
-    getBatchYearlyFee,
+    getBatchFeesByYear,
     createStudent,
     createFeeLedger,
     listAll,
