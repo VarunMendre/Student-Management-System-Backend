@@ -8,8 +8,17 @@ export const enrollStudent = asyncHandler(async (req, res, next) => {
 });
 
 export const listStudents = asyncHandler(async (req, res, next) => {
-    const students = await studentService.listStudents(req.query);
-    successResponse(res, { data: students }, "Students fetched successfully");
+    const { page, limit, search, department_id, course_id, batch_id, status } = req.query;
+    const students = await studentService.listStudents({
+        page,
+        limit,
+        search,
+        department_id,
+        course_id,
+        batch_id,
+        status
+    });
+    successResponse(res, students, "Students fetched successfully");
 });
 
 export const getStudent = asyncHandler(async (req, res, next) => {

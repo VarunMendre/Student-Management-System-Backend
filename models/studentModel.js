@@ -66,9 +66,22 @@ const createFeeLedger = async (client, data) => {
     return res.rows[0];
 };
 
-const listAll = async (query, values) => {
-    const { rows } = await pool.query(query, values);
+const listAll = async (query, values, pagination = {}) => {
+    const params = [...values];
+    let finalQuery = query;
+
+    if (pagination.limit !== undefined && pagination.offset !== undefined) {
+        finalQuery += ` LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+        params.push(pagination.limit, pagination.offset);
+    }
+
+    const { rows } = await pool.query(finalQuery, params);
     return rows;
+};
+
+const countAll = async (query, values) => {
+    const { rows } = await pool.query(query, values);
+    return parseInt(rows[0]?.total || 0, 10);
 };
 
 const findByIdWithDetails = async (id) => {
@@ -131,6 +144,7 @@ export default {
     createStudent,
     createFeeLedger,
     listAll,
+    countAll,
     findByIdWithDetails,
     getLedgerByStudent,
     getRecentTransactionsByStudent,

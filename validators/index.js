@@ -1,4 +1,4 @@
-import { CustomError } from "../utils/customError.js";
+import { CustomError, ErrorCodes } from "../utils/customError.js";
 import asyncHandler from "../utils/asyncHandler.js";
 
 /**
@@ -13,10 +13,8 @@ export const validate = (schema) => asyncHandler(async (req, res, next) => {
     });
 
     if (!result.success) {
-        const errorMsg = result.error.issues 
-            ? result.error.issues.map(err => `${err.path.join('.')}: ${err.message}`).join(", ")
-            : "Validation failed";
-        throw new CustomError(errorMsg, 400);
+        const issues = result.error.issues || [];
+        throw new CustomError("Validation failed", 400, ErrorCodes.VALIDATION_ERROR, { issues });
     }
 
     if (result.data.body) req.body = result.data.body;

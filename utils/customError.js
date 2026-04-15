@@ -1,16 +1,24 @@
+export const ErrorCodes = {
+    NOT_FOUND: "NOT_FOUND",
+    DUPLICATE_ENTRY: "DUPLICATE_ENTRY",
+    VALIDATION_ERROR: "VALIDATION_ERROR",
+    UNAUTHORIZED: "UNAUTHORIZED",
+    FORBIDDEN: "FORBIDDEN",
+    BATCH_FULL: "BATCH_FULL",
+    OVERPAYMENT: "OVERPAYMENT",
+    DATABASE_ERROR: "DATABASE_ERROR"
+};
+
 export class CustomError extends Error {
-    constructor(message, statusCode = 500, extra = {}) {
+    constructor(message, statusCode = 500, errorCode = null, details = null) {
         super(message);
 
         this.name = this.constructor.name;
-        this.status = statusCode; // Ensure consistency with 'status' usage in controllers
         this.statusCode = statusCode;
+        this.status = statusCode;
+        this.errorCode = errorCode;
         this.isOperational = true;
-        this.timestamp = new Date().toISOString();
-
-        if (extra.code) this.code = extra.code;
-        if (extra.details) this.details = extra.details;
-        if (extra.log) this.log = extra.log; // For internal logging if needed
+        if (details) this.details = details;
 
         Error.captureStackTrace(this, this.constructor);
     }

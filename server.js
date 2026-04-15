@@ -6,6 +6,7 @@ import batchRoutes from "./routes/batchRoutes.js";
 import studentRoutes from "./routes/studentRoutes.js";
 import scholarshipRoutes from "./routes/scholarshipRoutes.js";
 import transactionRoutes from "./routes/transactionRoutes.js";
+import { ErrorCodes } from "./utils/customError.js";
 
 const app = express();
 app.use(cors({
@@ -32,9 +33,16 @@ app.use("/api/v1/transactions", transactionRoutes);
 app.use((err, req, res, next) => {
     console.log(err);
     const statusCode = err.statusCode || 500;
-    const message = err.message || "Internal Server Error";
-    res.status(statusCode).json({ message });
-})
+    const error = err.message || "Internal Server Error";
+    const errorCode = err.errorCode || (statusCode >= 500 ? ErrorCodes.DATABASE_ERROR : ErrorCodes.VALIDATION_ERROR);
+
+    res.status(statusCode).json({
+        success: false,
+        error,
+        errorCode,
+        statusCode
+    });
+});
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
