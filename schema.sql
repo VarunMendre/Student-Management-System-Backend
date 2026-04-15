@@ -56,9 +56,46 @@ CREATE TABLE IF NOT EXISTS students (
     caste_category      VARCHAR(50) NOT NULL,
     gender              VARCHAR(10) NOT NULL CHECK (gender IN ('Male', 'Female', 'Other')),
     enrollment_status   VARCHAR(20) DEFAULT 'Active' CHECK (enrollment_status IN ('Active', 'Inactive', 'Graduated', 'Dropped')),
+    is_password_changed BOOLEAN DEFAULT FALSE,
     enrolled_at         TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS app_users (
+    id                  SERIAL PRIMARY KEY,
+    name                VARCHAR(150) NOT NULL,
+    email               VARCHAR(150) UNIQUE NOT NULL,
+    password            VARCHAR(255) NOT NULL,
+    contact_number      VARCHAR(15) NOT NULL,
+    role                VARCHAR(20) NOT NULL CHECK (role IN ('principal', 'accountant', 'admin', 'student')),
+    student_id          INTEGER REFERENCES students(id) ON DELETE CASCADE DEFAULT NULL,
+    is_active           BOOLEAN DEFAULT TRUE,
+    is_password_changed BOOLEAN DEFAULT FALSE,
+    refresh_token       TEXT DEFAULT NULL,
+    created_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+ALTER TABLE students
+ADD COLUMN IF NOT EXISTS is_password_changed BOOLEAN DEFAULT FALSE;
+
+ALTER TABLE app_users
+ADD COLUMN IF NOT EXISTS student_id INTEGER REFERENCES students(id) ON DELETE CASCADE;
+
+ALTER TABLE app_users
+ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;
+
+ALTER TABLE app_users
+ADD COLUMN IF NOT EXISTS is_password_changed BOOLEAN DEFAULT FALSE;
+
+ALTER TABLE app_users
+ADD COLUMN IF NOT EXISTS refresh_token TEXT DEFAULT NULL;
+
+ALTER TABLE app_users
+ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+
+ALTER TABLE app_users
+ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
 
 -- Student Fee Ledger (One row per academic year per student)
 CREATE TABLE IF NOT EXISTS student_fee_ledger (
@@ -121,6 +158,12 @@ CREATE INDEX IF NOT EXISTS idx_students_course ON students(course_id);
 CREATE INDEX IF NOT EXISTS idx_students_batch ON students(batch_id);
 CREATE INDEX IF NOT EXISTS idx_students_email ON students(email);
 CREATE INDEX IF NOT EXISTS idx_students_status ON students(enrollment_status);
+CREATE INDEX IF NOT EXISTS idx_students_password_changed ON students(is_password_changed);
+
+CREATE INDEX IF NOT EXISTS idx_app_users_email ON app_users(email);
+CREATE INDEX IF NOT EXISTS idx_app_users_role ON app_users(role);
+CREATE INDEX IF NOT EXISTS idx_app_users_student_id ON app_users(student_id);
+CREATE INDEX IF NOT EXISTS idx_app_users_active ON app_users(is_active);
 
 -- Fee ledger indexes
 CREATE INDEX IF NOT EXISTS idx_ledger_student ON student_fee_ledger(student_id);

@@ -1,7 +1,9 @@
 import { CustomError } from "../utils/customError.js";
 import { getAcademicYearLabels } from "../utils/receiptGenerator.js";
 import studentModel from "../models/studentModel.js";
+import userModel from "../models/userModel.js";
 import { withTransaction } from "../utils/dbUtils.js";
+import bcrypt from "bcryptjs";
 
 const enrollStudent = async (data) => {
     const {
@@ -32,6 +34,18 @@ const enrollStudent = async (data) => {
     
     return await withTransaction(async (client) => {
         const student = await studentModel.createStudent(client, data);
+        const hashedPassword = await bcrypt.hash(`${mobile_number}`, 12);
+
+        await userModel.createStudentUser(client, {
+            name: full_name,
+            email,
+            password: hashedPassword,
+            contact_number: mobile_number,
+            role: "student",
+            student_id: student.id,
+            is_password_changed: false
+        });
+
         const ledgerRows = [];
         for (let i = 0; i < yearLabels.length; i++) {
             const yr = yearLabels[i];
