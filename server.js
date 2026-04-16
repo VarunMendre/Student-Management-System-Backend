@@ -40,9 +40,16 @@ app.use("/api/v1/users", userManagementRoutes);
 app.use((err, req, res, next) => {
     console.log(err);
     const statusCode = err.statusCode || 500;
-    const message = err.message || "Internal Server Error";
-    res.status(statusCode).json({ message });
-})
+    const error = err.message || "Internal Server Error";
+    const errorCode = err.errorCode || (statusCode >= 500 ? ErrorCodes.DATABASE_ERROR : ErrorCodes.VALIDATION_ERROR);
+
+    res.status(statusCode).json({
+        success: false,
+        error,
+        errorCode,
+        statusCode
+    });
+});
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {

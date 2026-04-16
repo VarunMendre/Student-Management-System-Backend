@@ -1,4 +1,4 @@
-import { CustomError } from "../utils/customError.js";
+import { CustomError, ErrorCodes } from "../utils/customError.js";
 import { getAcademicYearLabels } from "../utils/receiptGenerator.js";
 import studentModel from "../models/studentModel.js";
 import userModel from "../models/userModel.js";
@@ -14,21 +14,21 @@ const enrollStudent = async (data) => {
     } = data;
 
     const batch = await studentModel.getBatchWithDetails(batch_id);
-    if (!batch) throw new CustomError("Batch not found", 400);
-    if (!batch.is_active) throw new CustomError("Batch is inactive", 400);
-    if (batch.course_id !== course_id) throw new CustomError("Batch mismatch", 400);
+    if (!batch) throw new CustomError("Batch not found", 400, ErrorCodes.NOT_FOUND);
+    if (!batch.is_active) throw new CustomError("Batch is inactive", 400, ErrorCodes.VALIDATION_ERROR);
+    if (batch.course_id !== course_id) throw new CustomError("Batch mismatch", 400, ErrorCodes.VALIDATION_ERROR);
 
     const course = await studentModel.getCourseDeptId(course_id);
-    if (!course) throw new CustomError("Course not found", 400);
-    if (course.department_id !== department_id) throw new CustomError("Department mismatch", 400);
+    if (!course) throw new CustomError("Course not found", 400, ErrorCodes.NOT_FOUND);
+    if (course.department_id !== department_id) throw new CustomError("Department mismatch", 400, ErrorCodes.VALIDATION_ERROR);
 
     const enrolledCount = await studentModel.getEnrolledCount(batch_id);
-    if (enrolledCount >= batch.total_seats) throw new CustomError("Batch full", 409);
+    if (enrolledCount >= batch.total_seats) throw new CustomError("Batch full", 409, ErrorCodes.BATCH_FULL);
 
     const batchFees = await studentModel.getBatchFeesByYear(batch_id);
     const totalCourseFee = Object.values(batchFees).reduce((sum, f) => sum + f, 0);
 
-    if (totalCourseFee <= 0) throw new CustomError("No fee components configured for this batch", 400);
+    if (totalCourseFee <= 0) throw new CustomError("No fee components configured for this batch", 400, ErrorCodes.VALIDATION_ERROR);
 
     const yearLabels = getAcademicYearLabels(batch.duration);
     
@@ -67,14 +67,29 @@ const enrollStudent = async (data) => {
             }
         };
     }).catch(error => {
-        if (error.code === "23505" && error.constraint?.includes("email")) throw new CustomError("Email already exists", 409);
+        if (error.code === "23505" && error.constraint?.includes("email")) {
+            throw new CustomError("Email already exists", 409, ErrorCodes.DUPLICATE_ENTRY);
+        }
         throw error;
     });
 };
 
 const listStudents = async (filters = {}) => {
-    const { department_id, course_id, batch_id, status, search } = filters;
-    let query = `
+    const {
+        department_id,
+        course_id,
+        batch_id,
+        status,
+        search,
+        page = 1,
+        limit = 10
+    } = filters;
+
+    const safePage = Math.max(Number(page) || 1, 1);
+    const safeLimit = Math.max(Number(limit) || 10, 1);
+    const offset = (safePage - 1) * safeLimit;
+
+    const selectQuery = `
         SELECT 
             s.id, s.full_name, s.email, s.mobile_number, s.prn_number,
             s.department_id, s.course_id, s.batch_id,
@@ -103,6 +118,14 @@ const listStudents = async (filters = {}) => {
             GROUP BY student_id
         ) tx ON s.id = tx.student_id
     `;
+    let query = selectQuery;
+    let countQuery = `
+        SELECT COUNT(*) as total
+        FROM students s
+        JOIN departments d ON s.department_id = d.id
+        JOIN courses c ON s.course_id = c.id
+        JOIN course_batches cb ON s.batch_id = cb.id
+    `;
 
     const conditions = [];
     const values = [];
@@ -118,22 +141,41 @@ const listStudents = async (filters = {}) => {
         paramIndex++;
     }
 
-    if (conditions.length > 0) query += " WHERE " + conditions.join(" AND ");
+    if (conditions.length > 0) {
+        const whereClause = " WHERE " + conditions.join(" AND ");
+        query += whereClause;
+        countQuery += whereClause;
+    }
+
     query += ` ORDER BY s.enrolled_at DESC`;
 
-    const rows = await studentModel.listAll(query, values);
-    return rows.map(row => ({
-        ...row,
-        total_course_fee: parseFloat(row.total_course_fee),
-        total_paid: parseFloat(row.total_paid),
-        total_pending: parseFloat(row.total_pending),
-        transaction_count: parseInt(row.transaction_count)
-    }));
+    const [rows, total] = await Promise.all([
+        studentModel.listAll(query, values, { limit: safeLimit, offset }),
+        studentModel.countAll(countQuery, values)
+    ]);
+
+    return {
+        data: rows.map(row => ({
+            ...row,
+            total_course_fee: parseFloat(row.total_course_fee),
+            total_paid: parseFloat(row.total_paid),
+            total_pending: parseFloat(row.total_pending),
+            transaction_count: parseInt(row.transaction_count, 10)
+        })),
+        pagination: {
+            page: safePage,
+            limit: safeLimit,
+            total,
+            totalPages: Math.ceil(total / safeLimit) || 1,
+            hasNext: safePage * safeLimit < total,
+            hasPrev: safePage > 1
+        }
+    };
 };
 
 const getStudentById = async (id) => {
     const student = await studentModel.findByIdWithDetails(id);
-    if (!student) throw new CustomError("Student not found", 404);
+    if (!student) throw new CustomError("Student not found", 404, ErrorCodes.NOT_FOUND);
 
     const ledger = await studentModel.getLedgerByStudent(id);
     const transactions = await studentModel.getRecentTransactionsByStudent(id);
@@ -150,7 +192,7 @@ const getStudentById = async (id) => {
 };
 
 const updateStudent = async (id, data) => {
-    if (!await studentModel.exists(id)) throw new CustomError("Student not found", 404);
+    if (!await studentModel.exists(id)) throw new CustomError("Student not found", 404, ErrorCodes.NOT_FOUND);
 
     const allowedFields = ["full_name", "email", "mobile_number", "alternate_number", "prn_number", "eligibility_number", "enrollment_status"];
     const updates = [];
@@ -164,7 +206,7 @@ const updateStudent = async (id, data) => {
         }
     }
 
-    if (updates.length === 0) throw new CustomError("No valid fields provided", 400);
+    if (updates.length === 0) throw new CustomError("No valid fields provided", 400, ErrorCodes.VALIDATION_ERROR);
 
     updates.push(`updated_at = CURRENT_TIMESTAMP`);
     values.push(id);
@@ -174,7 +216,9 @@ const updateStudent = async (id, data) => {
     try {
         return await studentModel.update(query, values);
     } catch (error) {
-        if (error.code === "23505" && error.constraint?.includes("email")) throw new CustomError("Email already exists", 409);
+        if (error.code === "23505" && error.constraint?.includes("email")) {
+            throw new CustomError("Email already exists", 409, ErrorCodes.DUPLICATE_ENTRY);
+        }
         throw error;
     }
 };

@@ -56,7 +56,9 @@ export const studentSchemas = {
             course_id: z.string().regex(idRegex).transform(Number).optional(),
             batch_id: z.string().regex(idRegex).transform(Number).optional(),
             status: z.enum(statusOptions).optional(),
-            search: z.string().max(100).optional()
+            search: z.string().max(100).optional(),
+            page: z.coerce.number().int().positive().default(1),
+            limit: z.coerce.number().int().positive().max(100).default(10)
         }).optional().default({})
     }),
 
