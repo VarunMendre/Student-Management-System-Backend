@@ -181,3 +181,42 @@ CREATE INDEX IF NOT EXISTS idx_txn_application_id ON fee_transactions(applicatio
 CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_scholarship_disbursal 
 ON fee_transactions (student_id, application_id, installment_no) 
 WHERE (payment_mode = 'Scholarship' AND application_id IS NOT NULL AND installment_no IS NOT NULL);
+
+-- Student Scholarship Applications (self-submitted PDF form flow)
+CREATE TABLE IF NOT EXISTS scholarship_applications (
+    id SERIAL PRIMARY KEY,
+    student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+    academic_cycle VARCHAR(20) DEFAULT NULL,
+    application_id VARCHAR(100) NOT NULL,
+    application_id_extracted VARCHAR(100) NOT NULL,
+    form_path VARCHAR(300) NOT NULL,
+    form_original_name VARCHAR(255) NOT NULL,
+    match_status VARCHAR(20) NOT NULL DEFAULT 'matched' CHECK (match_status IN ('matched')),
+    submission_status VARCHAR(30) NOT NULL DEFAULT 'pending_verification' CHECK (submission_status IN ('pending_verification', 'approved', 'rejected', 'conflict')),
+    submitted_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    approved_at TIMESTAMP DEFAULT NULL,
+    approved_by INTEGER REFERENCES app_users(id) ON DELETE SET NULL,
+    rejected_at TIMESTAMP DEFAULT NULL,
+    rejected_by INTEGER REFERENCES app_users(id) ON DELETE SET NULL,
+    rejection_reason VARCHAR(255) DEFAULT NULL,
+    UNIQUE(student_id),
+    UNIQUE(application_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_sch_app_student ON scholarship_applications(student_id);
+CREATE INDEX IF NOT EXISTS idx_sch_app_status ON scholarship_applications(submission_status);
+CREATE INDEX IF NOT EXISTS idx_sch_app_submitted ON scholarship_applications(submitted_at DESC);
+
+-- Scholarship audit trail (minimal immutable logs)
+CREATE TABLE IF NOT EXISTS scholarship_audit_logs (
+    id SERIAL PRIMARY KEY,
+    application_id INTEGER REFERENCES scholarship_applications(id) ON DELETE SET NULL,
+    actor_user_id INTEGER REFERENCES app_users(id) ON DELETE SET NULL,
+    actor_role VARCHAR(20) NOT NULL,
+    action VARCHAR(50) NOT NULL,
+    details JSONB DEFAULT '{}'::jsonb,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_sch_audit_application ON scholarship_audit_logs(application_id);
+CREATE INDEX IF NOT EXISTS idx_sch_audit_created ON scholarship_audit_logs(created_at DESC);

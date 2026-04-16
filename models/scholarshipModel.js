@@ -1,4 +1,5 @@
 import { pool } from "../config/db.js";
+import { getCategoryCandidates } from "../utils/scholarshipParser.js";
 
 /**
  * Scholarship Data Access Layer
@@ -43,10 +44,21 @@ const checkDuplicateDisbursal = async (client, studentId, appId, instNo) => {
 };
 
 const getScholarshipConfig = async (client, courseId, category, gender) => {
+    const categoryCandidates = getCategoryCandidates(category);
+    const loweredCandidates = categoryCandidates.map((item) => item.toLowerCase());
     const res = await client.query(`
         SELECT max_amount FROM course_scholarship_config
-        WHERE course_id = $1 AND caste_category = $2 AND gender = $3 AND is_active = TRUE
-    `, [courseId, category, gender]);
+        WHERE course_id = $1
+          AND gender = $2
+          AND is_active = TRUE
+          AND LOWER(caste_category) = ANY($3::text[])
+        ORDER BY
+          CASE
+            WHEN LOWER(caste_category) = LOWER($4) THEN 0
+            ELSE 1
+          END
+        LIMIT 1
+    `, [courseId, gender, loweredCandidates, category]);
     return res.rows[0];
 };
 
@@ -120,6 +132,189 @@ const markAsReversed = async (client, txnId) => {
     await client.query("UPDATE fee_transactions SET status = 'Reversed' WHERE id = $1", [txnId]);
 };
 
+const getStudentIdByUserId = async (userId) => {
+    const res = await pool.query(
+        "SELECT student_id FROM app_users WHERE id = $1 AND role = 'student'",
+        [userId]
+    );
+    return res.rows[0]?.student_id || null;
+};
+
+const getStudentForScholarship = async (studentId) => {
+    const res = await pool.query(`
+        SELECT s.id, s.full_name, s.course_id, s.caste_category, s.gender,
+               c.course_name
+        FROM students s
+        JOIN courses c ON c.id = s.course_id
+        WHERE s.id = $1
+    `, [studentId]);
+    return res.rows[0] || null;
+};
+
+const getScholarshipConfigForStudent = async (courseId, category, gender) => {
+    const categoryCandidates = getCategoryCandidates(category);
+    const loweredCandidates = categoryCandidates.map((item) => item.toLowerCase());
+    const res = await pool.query(`
+        SELECT max_amount
+        FROM course_scholarship_config
+        WHERE course_id = $1
+          AND gender = $2
+          AND is_active = TRUE
+          AND LOWER(caste_category) = ANY($3::text[])
+        ORDER BY
+          CASE
+            WHEN LOWER(caste_category) = LOWER($4) THEN 0
+            ELSE 1
+          END
+        LIMIT 1
+    `, [courseId, gender, loweredCandidates, category]);
+    return res.rows[0] || null;
+};
+
+const findApplicationByStudentAndCycle = async (studentId, _academicCycle = null) => {
+    const res = await pool.query(`
+        SELECT *
+        FROM scholarship_applications
+        WHERE student_id = $1
+        LIMIT 1
+    `, [studentId]);
+    return res.rows[0] || null;
+};
+
+const findApplicationByIdAndCycle = async (applicationId, _academicCycle = null) => {
+    const res = await pool.query(`
+        SELECT *
+        FROM scholarship_applications
+        WHERE application_id = $1
+        LIMIT 1
+    `, [applicationId]);
+    return res.rows[0] || null;
+};
+
+const upsertScholarshipApplication = async (client, data) => {
+    const {
+        studentId,
+        academicCycle,
+        applicationId,
+        extractedApplicationId,
+        formPath,
+        formOriginalName
+    } = data;
+
+    const res = await client.query(`
+        INSERT INTO scholarship_applications (
+            student_id, academic_cycle, application_id, application_id_extracted,
+            form_path, form_original_name, match_status, submission_status
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, 'matched', 'pending_verification')
+        ON CONFLICT (student_id)
+        DO UPDATE SET
+            application_id = EXCLUDED.application_id,
+            application_id_extracted = EXCLUDED.application_id_extracted,
+            form_path = EXCLUDED.form_path,
+            form_original_name = EXCLUDED.form_original_name,
+            match_status = 'matched',
+            submission_status = 'pending_verification',
+            submitted_at = CURRENT_TIMESTAMP,
+            approved_at = NULL,
+            approved_by = NULL,
+            rejected_at = NULL,
+            rejected_by = NULL,
+            rejection_reason = NULL
+        RETURNING *
+    `, [studentId, academicCycle, applicationId, extractedApplicationId, formPath, formOriginalName]);
+    return res.rows[0];
+};
+
+const createScholarshipAuditLog = async (client, data) => {
+    const {
+        applicationRecordId = null,
+        actorUserId = null,
+        actorRole,
+        action,
+        details = {}
+    } = data;
+
+    await client.query(`
+        INSERT INTO scholarship_audit_logs (
+            application_id, actor_user_id, actor_role, action, details
+        )
+        VALUES ($1, $2, $3, $4, $5::jsonb)
+    `, [applicationRecordId, actorUserId, actorRole, action, JSON.stringify(details || {})]);
+};
+
+const getStudentApplicationByStudentAndCycle = async (studentId, _academicCycle = null) => {
+    const res = await pool.query(`
+        SELECT sa.id, sa.student_id, sa.academic_cycle, sa.application_id, sa.application_id_extracted,
+               sa.form_path, sa.form_original_name, sa.match_status, sa.submission_status,
+               sa.submitted_at, sa.approved_at, sa.rejected_at, sa.rejection_reason
+        FROM scholarship_applications sa
+        WHERE sa.student_id = $1
+        LIMIT 1
+    `, [studentId]);
+    return res.rows[0] || null;
+};
+
+const listApplicationsForAdmin = async () => {
+    const res = await pool.query(`
+        SELECT sa.id, sa.student_id, sa.academic_cycle, sa.application_id, sa.application_id_extracted,
+               sa.form_path, sa.form_original_name, sa.match_status, sa.submission_status,
+               sa.submitted_at, sa.approved_at, sa.rejected_at, sa.rejection_reason,
+               s.full_name, s.course_id, c.course_name
+        FROM scholarship_applications sa
+        JOIN students s ON s.id = sa.student_id
+        JOIN courses c ON c.id = s.course_id
+        ORDER BY sa.submitted_at DESC
+    `);
+    return res.rows;
+};
+
+const getPendingApplicationsByCycle = async (_academicCycle = null) => {
+    const res = await pool.query(`
+        SELECT sa.*, s.full_name
+        FROM scholarship_applications sa
+        JOIN students s ON s.id = sa.student_id
+        WHERE sa.submission_status = 'pending_verification'
+    `);
+    return res.rows;
+};
+
+const getApplicationsByIdsAndCycle = async (applicationIds, _academicCycle = null) => {
+    if (!applicationIds.length) return [];
+    const res = await pool.query(`
+        SELECT sa.*, s.full_name
+        FROM scholarship_applications sa
+        JOIN students s ON s.id = sa.student_id
+        WHERE sa.application_id = ANY($1::text[])
+    `, [applicationIds]);
+    return res.rows;
+};
+
+const markApplicationApproved = async (client, applicationRecordId, approverUserId) => {
+    const res = await client.query(`
+        UPDATE scholarship_applications
+        SET submission_status = 'approved',
+            approved_at = CURRENT_TIMESTAMP,
+            approved_by = $2
+        WHERE id = $1
+        RETURNING *
+    `, [applicationRecordId, approverUserId]);
+    return res.rows[0] || null;
+};
+
+const markApplicationConflict = async (client, applicationRecordId, actorUserId, reason = "Duplicate application ID in uploaded gov sheet") => {
+    const res = await client.query(`
+        UPDATE scholarship_applications
+        SET submission_status = 'conflict',
+            rejected_at = CURRENT_TIMESTAMP,
+            rejected_by = $2,
+            rejection_reason = $3
+        WHERE id = $1
+        RETURNING *
+    `, [applicationRecordId, actorUserId, reason]);
+    return res.rows[0] || null;
+};
+
 export default {
     getConfigByCourse,
     upsertConfig,
@@ -131,5 +326,18 @@ export default {
     updateLedgerStatus,
     getSummary,
     getTransactionWithLedger,
-    markAsReversed
+    markAsReversed,
+    getStudentIdByUserId,
+    getStudentForScholarship,
+    getScholarshipConfigForStudent,
+    findApplicationByStudentAndCycle,
+    findApplicationByIdAndCycle,
+    upsertScholarshipApplication,
+    createScholarshipAuditLog,
+    getStudentApplicationByStudentAndCycle,
+    listApplicationsForAdmin,
+    getPendingApplicationsByCycle,
+    getApplicationsByIdsAndCycle,
+    markApplicationApproved,
+    markApplicationConflict
 };

@@ -18,7 +18,10 @@ const disburse = asyncHandler(async (req, res) => {
     if (!Array.isArray(disbursements)) {
         return res.status(400).json({ success: false, message: "Invalid input" });
     }
-    const results = await scholarshipService.disburseScholarshipBatch(disbursements);
+    const results = await scholarshipService.disburseScholarshipBatch(disbursements, {
+        actorUserId: req.user.userId,
+        actorRole: req.user.role
+    });
     
     const summary = {
         total: results.length,
@@ -40,10 +43,46 @@ const reverse = asyncHandler(async (req, res) => {
     res.json({ success: true, ...result });
 });
 
+const submitApplication = asyncHandler(async (req, res) => {
+    const { application_id } = req.body;
+    const result = await scholarshipService.submitScholarshipApplication({
+        actorUserId: req.user.userId,
+        actorRole: req.user.role,
+        manualApplicationId: application_id,
+        file: req.file
+    });
+    res.status(201).json({ success: true, data: result, message: "Application submitted and pending verification" });
+});
+
+const getMyApplication = asyncHandler(async (req, res) => {
+    const result = await scholarshipService.getMyScholarshipApplication({
+        actorUserId: req.user.userId
+    });
+    res.json({ success: true, data: result });
+});
+
+const listApplications = asyncHandler(async (_req, res) => {
+    const data = await scholarshipService.listStudentApplications();
+    res.json({ success: true, data });
+});
+
+const reconcile = asyncHandler(async (req, res) => {
+    const result = await scholarshipService.reconcileGovSheetRows({
+        actorUserId: req.user.userId,
+        actorRole: req.user.role,
+        rows: req.body?.rows || []
+    });
+    res.json({ success: true, data: result });
+});
+
 export default {
     getConfig,
     updateConfig,
     disburse,
     getSummary,
-    reverse
+    reverse,
+    submitApplication,
+    getMyApplication,
+    listApplications,
+    reconcile
 };
