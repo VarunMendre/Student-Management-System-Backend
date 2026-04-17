@@ -14,12 +14,16 @@ const getConfigByCourse = async (courseId) => {
 };
 
 const upsertConfig = async (client, courseId, caste, gender, amount) => {
+    // Normalize inputs to prevent duplicates due to casing/spacing
+    const normalizedCaste = String(caste || "").trim();
+    const normalizedGender = String(gender || "").trim();
+    
     await client.query(`
         INSERT INTO course_scholarship_config (course_id, caste_category, gender, max_amount)
         VALUES ($1, $2, $3, $4)
         ON CONFLICT (course_id, caste_category, gender) 
         DO UPDATE SET max_amount = EXCLUDED.max_amount, is_active = TRUE
-    `, [courseId, caste, gender, amount]);
+    `, [courseId, normalizedCaste, normalizedGender, amount]);
 };
 
 const getStudentAndLedgerForUpdate = async (client, studentId, yearNum) => {

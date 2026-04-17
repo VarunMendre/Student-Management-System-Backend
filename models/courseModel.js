@@ -2,7 +2,29 @@ import { pool } from "../config/db.js";
 
 const findAll = async () => {
     const { rows } = await pool.query(`
-        SELECT c.*, d.name as department_name 
+        SELECT c.*, d.name as department_name,
+               coalesce(
+                 (SELECT jsonb_object_agg(sub.cat_id, sub.details)
+                  FROM (
+                    SELECT 
+                      CASE 
+                        WHEN caste_category = 'SC / ST' THEN 'scst'
+                        WHEN caste_category = 'VJ / DT / NT / SBC' THEN 'vjnt'
+                        WHEN caste_category = 'OBC' THEN 'obc'
+                        WHEN caste_category = 'Open (EBC)' THEN 'ebc'
+                        WHEN caste_category = 'OPEN' THEN 'open'
+                        ELSE lower(caste_category)
+                      END as cat_id,
+                      jsonb_build_object(
+                        'maleGov', MAX(CASE WHEN gender = 'Male' THEN max_amount END),
+                        'femaleGov', MAX(CASE WHEN gender = 'Female' THEN max_amount END)
+                      ) as details
+                    FROM course_scholarship_config 
+                    WHERE course_id = c.id AND is_active = TRUE
+                    GROUP BY 1
+                  ) sub
+                 ), '{}'::jsonb
+               ) as "scholarshipStructure"
         FROM courses c 
         LEFT JOIN departments d ON c.department_id = d.id 
         ORDER BY c.created_at DESC
@@ -12,7 +34,29 @@ const findAll = async () => {
 
 const findById = async (id) => {
     const { rows } = await pool.query(`
-        SELECT c.*, d.name as department_name 
+        SELECT c.*, d.name as department_name,
+               coalesce(
+                 (SELECT jsonb_object_agg(sub.cat_id, sub.details)
+                  FROM (
+                    SELECT 
+                      CASE 
+                        WHEN caste_category = 'SC / ST' THEN 'scst'
+                        WHEN caste_category = 'VJ / DT / NT / SBC' THEN 'vjnt'
+                        WHEN caste_category = 'OBC' THEN 'obc'
+                        WHEN caste_category = 'Open (EBC)' THEN 'ebc'
+                        WHEN caste_category = 'OPEN' THEN 'open'
+                        ELSE lower(caste_category)
+                      END as cat_id,
+                      jsonb_build_object(
+                        'maleGov', MAX(CASE WHEN gender = 'Male' THEN max_amount END),
+                        'femaleGov', MAX(CASE WHEN gender = 'Female' THEN max_amount END)
+                      ) as details
+                    FROM course_scholarship_config 
+                    WHERE course_id = c.id AND is_active = TRUE
+                    GROUP BY 1
+                  ) sub
+                 ), '{}'::jsonb
+               ) as "scholarshipStructure"
         FROM courses c 
         LEFT JOIN departments d ON c.department_id = d.id 
         WHERE c.id = $1
