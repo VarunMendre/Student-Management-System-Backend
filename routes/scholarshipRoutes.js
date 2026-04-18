@@ -16,19 +16,19 @@ router.get("/application/me", authorizeRoles("student"), scholarshipController.g
 
 // Admin-side student applications + reconciliation
 router.get("/applications", authorizeRoles("admin", "accountant", "principal"), scholarshipController.listApplications);
-router.post("/reconcile", authorizeRoles("admin", "accountant", "principal"), scholarshipController.reconcile);
+router.post("/reconcile", authorizeRoles("admin", "principal"), scholarshipController.reconcile);
 
 // Scholarship Configuration
-router.get("/config/:courseId", scholarshipController.getConfig);
-router.post("/config", scholarshipController.updateConfig);
+router.get("/config/:courseId", authorizeRoles("admin", "accountant", "principal"), scholarshipController.getConfig);
+router.post("/config", authorizeRoles("admin", "principal"), scholarshipController.updateConfig);
 
 // Scholarship Disbursal
-router.post("/disburse", scholarshipController.disburse);
+router.post("/disburse", authorizeRoles("admin", "principal"), scholarshipController.disburse);
 
 // Dashboard/Stats
-router.get("/summary", scholarshipController.getSummary);
+router.get("/summary", authorizeRoles("admin", "principal"), scholarshipController.getSummary);
 
 // Reverse Scholarship
-router.delete("/reverse/:txnId", scholarshipController.reverse);
+router.delete("/reverse/:txnId", authorizeRoles("admin", "principal"), scholarshipController.reverse);
 
 export default router;

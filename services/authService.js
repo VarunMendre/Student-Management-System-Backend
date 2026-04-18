@@ -18,6 +18,7 @@ const buildAuthPayload = (user, tokenType) => ({
     userId: user.id,
     email: user.email,
     role: user.role,
+    student_id: user.student_id || null,
     type: tokenType
 });
 

@@ -8,15 +8,16 @@ import {
     recoverUser,
     updateUserRole
 } from "../controllers/userManagementController.js";
+import { authorizeRoles } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
-router.get("/", getAllUsers);
-router.post("/", createUser);
-router.patch("/:id/role", updateUserRole);
-router.patch("/:id/deactivate", deactivateUser);
-router.patch("/:id/recover", recoverUser);
-router.delete("/:id", deleteUser);
-router.delete("/:id/session", forceLogout);
+router.get("/", authorizeRoles("principal"), getAllUsers);
+router.post("/", authorizeRoles("principal"), createUser);
+router.patch("/:id/role", authorizeRoles("principal"), updateUserRole);
+router.patch("/:id/deactivate", authorizeRoles("principal"), deactivateUser);
+router.patch("/:id/recover", authorizeRoles("principal"), recoverUser);
+router.delete("/:id", authorizeRoles("principal"), deleteUser);
+router.delete("/:id/session", authorizeRoles("principal"), forceLogout);
 
 export default router;
