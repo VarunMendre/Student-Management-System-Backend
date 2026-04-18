@@ -10,8 +10,8 @@ import { authorizeRoles } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
-router.get("/", authorizeRoles("principal", "accountant", "admin"), getAllCourses);
-router.get("/:id", authorizeRoles("principal", "accountant", "admin"), getCourseById);
+router.get("/", authorizeRoles("principal", "accountant", "admin", "student"), getAllCourses);
+router.get("/:id", authorizeRoles("principal", "accountant", "admin", "student"), getCourseById);
 router.post("/", authorizeRoles("principal", "accountant"), createCourse);
 router.put("/:id", authorizeRoles("principal", "accountant"), updateCourse);
 router.delete("/:id", authorizeRoles("principal", "accountant"), deleteCourse);

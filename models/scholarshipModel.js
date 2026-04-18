@@ -240,8 +240,10 @@ const getStudentApplicationByStudentAndCycle = async (studentId, _academicCycle 
     const res = await pool.query(`
         SELECT sa.id, sa.student_id, sa.academic_cycle, sa.application_id, sa.application_id_extracted,
                sa.form_path, sa.form_original_name, sa.match_status, sa.submission_status,
-               sa.submitted_at, sa.approved_at, sa.rejected_at, sa.rejection_reason
+               sa.submitted_at, sa.approved_at, sa.rejected_at, sa.rejection_reason,
+               s.full_name
         FROM scholarship_applications sa
+        JOIN students s ON s.id = sa.student_id
         WHERE sa.student_id = $1
         LIMIT 1
     `, [studentId]);

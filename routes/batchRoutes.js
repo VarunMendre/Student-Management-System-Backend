@@ -7,8 +7,8 @@ import { batchSchemas } from "../validators/batch/batchSchema.js";
 const router = express.Router();
 
 router.post("/", authorizeRoles("principal", "accountant"), validate(batchSchemas.create), createBatch);
-router.get("/", authorizeRoles("principal", "accountant", "admin"), listBatches);
-router.get("/:batch_id", authorizeRoles("principal", "accountant", "admin"), validate(batchSchemas.byId), getBatchWithFees);
+router.get("/", authorizeRoles("principal", "accountant", "admin", "student"), listBatches);
+router.get("/:batch_id", authorizeRoles("principal", "accountant", "admin", "student"), validate(batchSchemas.byId), getBatchWithFees);
 router.put("/:batch_id/fees", authorizeRoles("principal", "accountant"), validate(batchSchemas.saveFees), saveFees);
 
 export default router;
