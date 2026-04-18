@@ -34,10 +34,33 @@ const findFeesByBatchWithTotal = async (batchId) => {
     return res.rows;
 };
 
+const findAllWithCourseDetails = async (courseId = null) => {
+    const values = [];
+    let query = `
+        SELECT cb.*, c.course_name, d.name as department_name,
+               COALESCE(SUM(cf.amount), 0) as total_fee
+        FROM course_batches cb
+        JOIN courses c ON cb.course_id = c.id
+        JOIN departments d ON c.department_id = d.id
+        LEFT JOIN course_fees cf ON cb.id = cf.batch_id
+    `;
+
+    if (courseId) {
+        query += " WHERE cb.course_id = $1";
+        values.push(courseId);
+    }
+
+    query += " GROUP BY cb.id, c.course_name, d.name ORDER BY cb.admission_year DESC";
+
+    const { rows } = await pool.query(query, values);
+    return rows;
+};
+
 export default {
     create,
     deleteFeesByBatch,
     insertFee,
     findBatchById,
-    findFeesByBatchWithTotal
+    findFeesByBatchWithTotal,
+    findAllWithCourseDetails
 };

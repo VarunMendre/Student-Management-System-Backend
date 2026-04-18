@@ -14,7 +14,12 @@ export const validate = (schema) => asyncHandler(async (req, res, next) => {
 
     if (!result.success) {
         const issues = result.error.issues || [];
-        throw new CustomError("Validation failed", 400, ErrorCodes.VALIDATION_ERROR, { issues });
+        throw new CustomError({
+            message: "Validation failed",
+            statusCode: 400,
+            code: ErrorCodes.VALIDATION_ERROR,
+            details: { issues }
+        });
     }
 
     if (result.data.body) req.body = result.data.body;

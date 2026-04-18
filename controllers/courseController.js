@@ -1,7 +1,7 @@
 import courseService from "../services/courseService.js";
 import asyncHandler from "../utils/asyncHandler.js";
 import { successResponse } from "../utils/customResponse.js";
-import { CustomError } from "../utils/customError.js";
+import { CustomError, ErrorCodes } from "../utils/customError.js";
 
 export const getAllCourses = asyncHandler(async (req, res) => {
     const courses = await courseService.getAllCourses();
@@ -13,7 +13,11 @@ export const getCourseById = asyncHandler(async (req, res) => {
     const course = await courseService.getCourseById(id);
     
     if (!course) {
-        throw new CustomError("Course not found", 404);
+        throw new CustomError({
+            message: "Course not found",
+            statusCode: 404,
+            code: ErrorCodes.NOT_FOUND
+        });
     }
     
     successResponse(res, course, "Course details fetched successfully");
@@ -23,7 +27,11 @@ export const createCourse = asyncHandler(async (req, res) => {
     const { course_name, duration, department_id, course_code, program_level } = req.body;
 
     if (!course_name || !department_id || !course_code) {
-        throw new CustomError("Course name, department ID, and course code are required", 400);
+        throw new CustomError({
+            message: "Course name, department ID, and course code are required",
+            statusCode: 400,
+            code: ErrorCodes.VALIDATION_ERROR
+        });
     }
 
     const newCourse = await courseService.createCourse({
@@ -50,7 +58,11 @@ export const updateCourse = asyncHandler(async (req, res) => {
     });
 
     if (!updatedCourse) {
-        throw new CustomError("Course not found", 404);
+        throw new CustomError({
+            message: "Course not found",
+            statusCode: 404,
+            code: ErrorCodes.NOT_FOUND
+        });
     }
 
     successResponse(res, updatedCourse, "Course updated successfully");
@@ -61,7 +73,11 @@ export const deleteCourse = asyncHandler(async (req, res) => {
     const deletedCourse = await courseService.deleteCourse(id);
 
     if (!deletedCourse) {
-        throw new CustomError("Course not found", 404);
+        throw new CustomError({
+            message: "Course not found",
+            statusCode: 404,
+            code: ErrorCodes.NOT_FOUND
+        });
     }
 
     successResponse(res, deletedCourse, "Course deleted successfully");

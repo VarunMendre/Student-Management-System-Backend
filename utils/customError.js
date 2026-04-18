@@ -6,20 +6,32 @@ export const ErrorCodes = {
     FORBIDDEN: "FORBIDDEN",
     BATCH_FULL: "BATCH_FULL",
     OVERPAYMENT: "OVERPAYMENT",
-    DATABASE_ERROR: "DATABASE_ERROR"
+    DATABASE_ERROR: "DATABASE_ERROR",
+    INTERNAL_ERROR: "INTERNAL_ERROR",
+    CONFLICT: "CONFLICT"
 };
 
 export class CustomError extends Error {
-    constructor(message, statusCode = 500, errorCode = null, details = null) {
+    constructor({
+        message = "Internal Server Error",
+        statusCode = 500,
+        code = ErrorCodes.INTERNAL_ERROR,
+        details = null,
+        isOperational = true,
+        cause = null,
+        timestamp = new Date().toISOString()
+    } = {}) {
         super(message);
 
         this.name = this.constructor.name;
         this.statusCode = statusCode;
-        this.status = statusCode;
-        this.errorCode = errorCode;
-        this.isOperational = true;
+        this.code = code;
+        this.errorCode = code;
+        this.isOperational = isOperational;
+        this.timestamp = timestamp;
+        if (cause) this.cause = cause;
         if (details) this.details = details;
 
-        Error.captureStackTrace(this, this.constructor);
+        Error.captureStackTrace?.(this, this.constructor);
     }
 }

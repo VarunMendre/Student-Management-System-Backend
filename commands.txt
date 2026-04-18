@@ -1,6 +1,0 @@
-steps to perform after cloning repo : 
-
-1. copy .env
-2. npm i 
-3. node --env-file=.env seeds-db.js
-4. npm run dev

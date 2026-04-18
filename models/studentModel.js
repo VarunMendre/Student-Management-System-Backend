@@ -1,5 +1,37 @@
 import { pool } from "../config/db.js";
 
+const STUDENT_FILTER_COLUMNS = {
+    department_id: "s.department_id",
+    course_id: "s.course_id",
+    batch_id: "s.batch_id",
+    status: "s.enrollment_status"
+};
+
+const buildStudentFilterParts = (filters = {}) => {
+    const conditions = [];
+    const values = [];
+    let paramIndex = 1;
+
+    Object.entries(STUDENT_FILTER_COLUMNS).forEach(([filterKey, column]) => {
+        if (!filters[filterKey]) {
+            return;
+        }
+
+        conditions.push(`${column} = $${paramIndex++}`);
+        values.push(filters[filterKey]);
+    });
+
+    if (filters.search) {
+        conditions.push(`(s.full_name ILIKE $${paramIndex} OR s.email ILIKE $${paramIndex} OR s.prn_number ILIKE $${paramIndex})`);
+        values.push(`%${filters.search}%`);
+    }
+
+    return {
+        whereClause: conditions.length ? ` WHERE ${conditions.join(" AND ")}` : "",
+        values
+    };
+};
+
 const getBatchWithDetails = async (batchId) => {
     const res = await pool.query(
         `SELECT cb.id, cb.course_id, cb.batch_name, cb.total_seats, cb.is_active, 
@@ -136,6 +168,93 @@ const update = async (query, values) => {
     return rows[0];
 };
 
+const findStudents = async (filters = {}, pagination = {}) => {
+    const baseQuery = `
+        SELECT 
+            s.id, s.full_name, s.email, s.mobile_number, s.prn_number,
+            s.department_id, s.course_id, s.batch_id,
+            d.name as department_name, c.course_name, cb.batch_name,
+            s.caste_category, s.gender, s.enrollment_status,
+            COALESCE(ledger.total_course_fee, 0) as total_course_fee,
+            COALESCE(ledger.total_paid, 0) as total_paid,
+            COALESCE(ledger.total_pending, 0) as total_pending,
+            COALESCE(tx.transaction_count, 0) as transaction_count
+        FROM students s
+        JOIN departments d ON s.department_id = d.id
+        JOIN courses c ON s.course_id = c.id
+        JOIN course_batches cb ON s.batch_id = cb.id
+        LEFT JOIN (
+            SELECT student_id, 
+                   SUM(total_yearly_fee) as total_course_fee, 
+                   SUM(total_paid) as total_paid,
+                   SUM(pending_fee) as total_pending
+            FROM student_fee_ledger 
+            GROUP BY student_id
+        ) ledger ON s.id = ledger.student_id
+        LEFT JOIN (
+            SELECT student_id, COUNT(id) as transaction_count 
+            FROM fee_transactions 
+            WHERE status = 'Active'
+            GROUP BY student_id
+        ) tx ON s.id = tx.student_id
+    `;
+    const { whereClause, values } = buildStudentFilterParts(filters);
+
+    return listAll(`${baseQuery}${whereClause} ORDER BY s.enrolled_at DESC`, values, pagination);
+};
+
+const countStudents = async (filters = {}) => {
+    const baseQuery = `
+        SELECT COUNT(*) as total
+        FROM students s
+        JOIN departments d ON s.department_id = d.id
+        JOIN courses c ON s.course_id = c.id
+        JOIN course_batches cb ON s.batch_id = cb.id
+    `;
+    const { whereClause, values } = buildStudentFilterParts(filters);
+
+    return countAll(`${baseQuery}${whereClause}`, values);
+};
+
+const updateStudentById = async (id, data) => {
+    const allowedFields = [
+        "full_name",
+        "email",
+        "mobile_number",
+        "alternate_number",
+        "prn_number",
+        "eligibility_number",
+        "enrollment_status"
+    ];
+    const updates = [];
+    const values = [];
+    let paramIndex = 1;
+
+    allowedFields.forEach((field) => {
+        if (data[field] === undefined) {
+            return;
+        }
+
+        updates.push(`${field} = $${paramIndex++}`);
+        values.push(data[field]);
+    });
+
+    if (!updates.length) {
+        return null;
+    }
+
+    updates.push("updated_at = CURRENT_TIMESTAMP");
+    values.push(id);
+
+    return update(
+        `UPDATE students
+         SET ${updates.join(", ")}
+         WHERE id = $${paramIndex}
+         RETURNING id, full_name, email, mobile_number, alternate_number, prn_number, eligibility_number, enrollment_status, updated_at`,
+        values
+    );
+};
+
 export default {
     getBatchWithDetails,
     getCourseDeptId,
@@ -149,5 +268,8 @@ export default {
     getLedgerByStudent,
     getRecentTransactionsByStudent,
     exists,
-    update
+    update,
+    findStudents,
+    countStudents,
+    updateStudentById
 };

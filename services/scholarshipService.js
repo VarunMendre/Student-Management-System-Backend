@@ -17,7 +17,7 @@ const updateCourseScholarshipConfig = async (courseId, configs) => {
         for (const { caste_category, gender, max_amount } of configs) {
             await scholarshipModel.upsertConfig(client, courseId, caste_category, gender, max_amount);
         }
-        return { message: `Scholarship configuration updated` };
+        return { message: "Scholarship configuration updated" };
     });
 };
 
@@ -53,30 +53,50 @@ const extractTextFromImage = async (imagePath) => {
 const ensureStudentEligibility = async (studentId) => {
     const student = await scholarshipModel.getStudentForScholarship(studentId);
     if (!student) {
-        throw new CustomError("Student profile not found", 404, ErrorCodes.NOT_FOUND);
+        throw new CustomError({
+            message: "Student profile not found",
+            statusCode: 404,
+            code: ErrorCodes.NOT_FOUND
+        });
     }
     const config = await scholarshipModel.getScholarshipConfigForStudent(student.course_id, student.caste_category, student.gender);
     if (!config || Number(config.max_amount) <= 0) {
-        throw new CustomError("Student is not eligible for scholarship submission", 403, ErrorCodes.FORBIDDEN);
+        throw new CustomError({
+            message: "Student is not eligible for scholarship submission",
+            statusCode: 403,
+            code: ErrorCodes.FORBIDDEN
+        });
     }
     return student;
 };
 
 const submitScholarshipApplication = async ({ actorUserId, actorRole, manualApplicationId, file }) => {
     if (!file?.path) {
-        throw new CustomError("Scholarship form PDF is required", 400, ErrorCodes.VALIDATION_ERROR);
+        throw new CustomError({
+            message: "Scholarship form PDF is required",
+            statusCode: 400,
+            code: ErrorCodes.VALIDATION_ERROR
+        });
     }
 
     const normalizedManualId = normalizeApplicationId(manualApplicationId);
     if (!normalizedManualId || normalizedManualId.length < 6) {
         await deleteFileSafely(file.path);
-        throw new CustomError("Invalid application ID. Use at least 6 alphanumeric characters", 400, ErrorCodes.VALIDATION_ERROR);
+        throw new CustomError({
+            message: "Invalid application ID. Use at least 6 alphanumeric characters",
+            statusCode: 400,
+            code: ErrorCodes.VALIDATION_ERROR
+        });
     }
 
     const studentId = await scholarshipModel.getStudentIdByUserId(actorUserId);
     if (!studentId) {
         await deleteFileSafely(file.path);
-        throw new CustomError("Student account mapping not found", 404, ErrorCodes.NOT_FOUND);
+        throw new CustomError({
+            message: "Student account mapping not found",
+            statusCode: 404,
+            code: ErrorCodes.NOT_FOUND
+        });
     }
 
     await ensureStudentEligibility(studentId);
@@ -85,7 +105,11 @@ const submitScholarshipApplication = async ({ actorUserId, actorRole, manualAppl
     const duplicateOwner = await scholarshipModel.findApplicationByIdAndCycle(normalizedManualId);
     if (duplicateOwner && Number(duplicateOwner.student_id) !== Number(studentId)) {
         await deleteFileSafely(file.path);
-        throw new CustomError("Application ID already used by another student", 409, ErrorCodes.DUPLICATE_ENTRY);
+        throw new CustomError({
+            message: "Application ID already used by another student",
+            statusCode: 409,
+            code: ErrorCodes.DUPLICATE_ENTRY
+        });
     }
 
     let extractedId = null;
@@ -103,26 +127,43 @@ const submitScholarshipApplication = async ({ actorUserId, actorRole, manualAppl
         extractedId = extractApplicationIdFromPdfText(detectedText.toUpperCase());
     } catch (_error) {
         await deleteFileSafely(file.path);
-        throw new CustomError("Could not read uploaded file content. For images, ensure ID text is clear and readable", 422, ErrorCodes.VALIDATION_ERROR);
+        throw new CustomError({
+            message: "Could not read uploaded file content. For images, ensure ID text is clear and readable",
+            statusCode: 422,
+            code: ErrorCodes.VALIDATION_ERROR
+        });
     }
 
     if (!extractedId) {
         await deleteFileSafely(file.path);
-        throw new CustomError("Application ID was not detected in the uploaded file", 422, ErrorCodes.VALIDATION_ERROR);
+        throw new CustomError({
+            message: "Application ID was not detected in the uploaded file",
+            statusCode: 422,
+            code: ErrorCodes.VALIDATION_ERROR
+        });
     }
 
     if (normalizedManualId !== extractedId) {
         await deleteFileSafely(file.path);
-        throw new CustomError("Entered Application ID does not match the ID found in PDF", 422, ErrorCodes.VALIDATION_ERROR, {
-            entered_application_id: normalizedManualId,
-            extracted_application_id: extractedId
+        throw new CustomError({
+            message: "Entered Application ID does not match the ID found in PDF",
+            statusCode: 422,
+            code: ErrorCodes.VALIDATION_ERROR,
+            details: {
+                entered_application_id: normalizedManualId,
+                extracted_application_id: extractedId
+            }
         });
     }
 
     const publicFormPath = resolvePublicUploadPath(file.path);
     if (!publicFormPath) {
         await deleteFileSafely(file.path);
-        throw new CustomError("Failed to store uploaded file", 500, ErrorCodes.DATABASE_ERROR);
+        throw new CustomError({
+            message: "Failed to store uploaded file",
+            statusCode: 500,
+            code: ErrorCodes.DATABASE_ERROR
+        });
     }
 
     return await withTransaction(async (client) => {
@@ -167,7 +208,11 @@ const submitScholarshipApplication = async ({ actorUserId, actorRole, manualAppl
 const getMyScholarshipApplication = async ({ actorUserId }) => {
     const studentId = await scholarshipModel.getStudentIdByUserId(actorUserId);
     if (!studentId) {
-        throw new CustomError("Student account mapping not found", 404, ErrorCodes.NOT_FOUND);
+        throw new CustomError({
+            message: "Student account mapping not found",
+            statusCode: 404,
+            code: ErrorCodes.NOT_FOUND
+        });
     }
     return scholarshipModel.getStudentApplicationByStudentAndCycle(studentId);
 };
@@ -269,48 +314,84 @@ const disburseScholarshipBatch = async (disbursements, actor = {}) => {
 
     for (const record of disbursements) {
         const { student_id, amount, installment_no, application_id, academic_year_num } = record;
-        
+
         const res = await withTransactionSilent(async (client) => {
             const student = await scholarshipModel.getStudentAndLedgerForUpdate(client, student_id, academic_year_num);
-            if (!student) throw new Error("Student or academic year ledger not found");
+            if (!student) throw new CustomError({
+                message: "Student or academic year ledger not found",
+                statusCode: 404,
+                code: ErrorCodes.NOT_FOUND
+            });
 
             const normalizedAppId = normalizeApplicationId(application_id);
-            if (!normalizedAppId) throw new Error("Application ID is required");
+            if (!normalizedAppId) throw new CustomError({
+                message: "Application ID is required",
+                statusCode: 400,
+                code: ErrorCodes.VALIDATION_ERROR
+            });
 
             const applicationRecord = await scholarshipModel.findApplicationByIdAndCycle(normalizedAppId);
             if (applicationRecord && Number(applicationRecord.student_id) !== Number(student_id)) {
-                throw new Error("Application ID belongs to another student");
+                throw new CustomError({
+                    message: "Application ID belongs to another student",
+                    statusCode: 409,
+                    code: ErrorCodes.CONFLICT
+                });
             }
 
             if (applicationRecord && applicationRecord.submission_status === "conflict") {
-                throw new Error("Application is in conflict state and must be resolved first");
+                throw new CustomError({
+                    message: "Application is in conflict state and must be resolved first",
+                    statusCode: 409,
+                    code: ErrorCodes.CONFLICT
+                });
             }
 
             if (await scholarshipModel.checkDuplicateDisbursal(client, student_id, normalizedAppId, installment_no)) {
-                throw new Error("Duplicate disbursal detected");
+                throw new CustomError({
+                    message: "Duplicate disbursal detected",
+                    statusCode: 409,
+                    code: ErrorCodes.DUPLICATE_ENTRY
+                });
             }
 
             const config = await scholarshipModel.getScholarshipConfig(client, student.course_id, student.caste_category, student.gender);
-            if (!config) throw new Error(`No limit configured for ${student.caste_category} ${student.gender}`);
-            
+            if (!config) throw new CustomError({
+                message: `No limit configured for ${student.caste_category} ${student.gender}`,
+                statusCode: 400,
+                code: ErrorCodes.VALIDATION_ERROR
+            });
+
             const maxAmount = parseFloat(config.max_amount);
             const totalReceived = await scholarshipModel.getTotalReceived(client, student.ledger_id);
-            if (totalReceived >= maxAmount) throw new Error(`Limit reached (₹${maxAmount})`);
+            if (totalReceived >= maxAmount) throw new CustomError({
+                message: `Limit reached (${maxAmount})`,
+                statusCode: 400,
+                code: ErrorCodes.OVERPAYMENT,
+                details: {
+                    max_amount: maxAmount,
+                    total_received: totalReceived
+                }
+            });
 
-            let appliedAmount = Math.min(parseFloat(amount), maxAmount - totalReceived, parseFloat(student.pending_fee));
-            if (appliedAmount <= 0) throw new Error("No amount applicable (Balance is 0 or limit reached)");
+            const appliedAmount = Math.min(parseFloat(amount), maxAmount - totalReceived, parseFloat(student.pending_fee));
+            if (appliedAmount <= 0) throw new CustomError({
+                message: "No amount applicable (Balance is 0 or limit reached)",
+                statusCode: 400,
+                code: ErrorCodes.OVERPAYMENT
+            });
 
             const receiptNumber = await generateReceiptNumber();
             const txn = await scholarshipModel.createTransaction(client, {
                 student_id, ledger_id: student.ledger_id, amount: appliedAmount,
-                mode: 'Scholarship', reference: `APP-${normalizedAppId}-INST-${installment_no}`,
+                mode: "Scholarship", reference: `APP-${normalizedAppId}-INST-${installment_no}`,
                 receiptNumber, remarks: `Scholarship Inst ${installment_no}`,
                 appId: normalizedAppId, instNo: installment_no
             });
 
             const newTotalPaid = parseFloat(student.total_paid) + appliedAmount;
             const totalYearlyFee = parseFloat(student.total_yearly_fee);
-            let status = newTotalPaid >= totalYearlyFee ? "Paid" : (newTotalPaid > 0 ? "Partial" : "Pending");
+            const status = newTotalPaid >= totalYearlyFee ? "Paid" : (newTotalPaid > 0 ? "Partial" : "Pending");
 
             await scholarshipModel.updateLedgerStatus(client, student.ledger_id, newTotalPaid, status);
 
@@ -323,7 +404,7 @@ const disburseScholarshipBatch = async (disbursements, actor = {}) => {
                     action: "approved",
                     details: {
                         reason: "disbursal_processed",
-                        installment_no: installment_no,
+                        installment_no,
                         amount_applied: appliedAmount,
                         receipt_number: txn.receipt_number
                     }
@@ -340,9 +421,17 @@ const disburseScholarshipBatch = async (disbursements, actor = {}) => {
         });
 
         if (res.success) {
-            results.push({ student_id, status: 'success', ...res.result });
+            results.push({ student_id, status: "success", ...res.result });
         } else {
-            results.push({ student_id, status: 'failed', amount_requested: amount, error: res.error.message });
+            results.push({
+                student_id,
+                status: "failed",
+                amount_requested: amount,
+                error: res.error.message,
+                error_code: res.error.code || ErrorCodes.INTERNAL_ERROR,
+                status_code: res.error.statusCode || 500,
+                timestamp: res.error.timestamp || new Date().toISOString()
+            });
         }
     }
     return results;
@@ -355,11 +444,15 @@ const getScholarshipSummary = async () => {
 const reverseScholarship = async (txnId) => {
     return await withTransaction(async (client) => {
         const txn = await scholarshipModel.getTransactionWithLedger(client, txnId);
-        if (!txn || txn.status === 'Reversed') throw new Error(!txn ? "Not found" : "Already reversed");
+        if (!txn || txn.status === "Reversed") throw new CustomError({
+            message: !txn ? "Transaction not found" : "Transaction already reversed",
+            statusCode: !txn ? 404 : 409,
+            code: !txn ? ErrorCodes.NOT_FOUND : ErrorCodes.CONFLICT
+        });
 
         const newTotalPaid = parseFloat(txn.total_paid) - parseFloat(txn.amount_paid);
         const totalYearlyFee = parseFloat(txn.total_yearly_fee);
-        let status = newTotalPaid >= totalYearlyFee ? "Paid" : (newTotalPaid > 0 ? "Partial" : "Pending");
+        const status = newTotalPaid >= totalYearlyFee ? "Paid" : (newTotalPaid > 0 ? "Partial" : "Pending");
 
         await scholarshipModel.updateLedgerStatus(client, txn.ledger_id, newTotalPaid, status);
         await scholarshipModel.markAsReversed(client, txnId);
@@ -367,8 +460,8 @@ const reverseScholarship = async (txnId) => {
     });
 };
 
-export default { 
-    getCourseScholarshipConfig, updateCourseScholarshipConfig, 
+export default {
+    getCourseScholarshipConfig, updateCourseScholarshipConfig,
     disburseScholarshipBatch, getScholarshipSummary, reverseScholarship,
     submitScholarshipApplication, getMyScholarshipApplication,
     listStudentApplications, reconcileGovSheetRows

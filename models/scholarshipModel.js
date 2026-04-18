@@ -65,17 +65,6 @@ const getScholarshipConfig = async (client, courseId, category, gender) => {
     `, [courseId, gender, loweredCandidates, category]);
     return res.rows[0];
 };
-
-const getTotalScholarshipReceived = async (client, ledgerId) => {
-    const res = await client.query(`
-        SELECT COALESCE(SUM(amount_paid), 0) as total 
-        FROM fee_transactions 
-        WHERE ledger_id = $1 AND payment_mode = 'Scholarship' AND status = 'Active'
-    `, [ledgerId]);
-    return parseFloat(receivedRes.rows[0].total); // Wait, variable name mismatch in my thought, fixing below
-};
-
-// Fixing above
 const getTotalReceived = async (client, ledgerId) => {
     const res = await client.query(`
         SELECT COALESCE(SUM(amount_paid), 0) as total 

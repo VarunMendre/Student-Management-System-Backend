@@ -11,7 +11,7 @@ import transactionRoutes from "./routes/transactionRoutes.js";
 import authRoutes from "./routes/authRoutes.js";
 import userManagementRoutes from "./routes/userManagementRoutes.js";
 import { verifyAccessToken } from "./middleware/authMiddleware.js";
-import { ErrorCodes } from "./utils/customError.js";
+import { CustomError, ErrorCodes } from "./utils/customError.js";
 
 const app = express();
 app.use(cors({
@@ -24,6 +24,12 @@ app.use(cors({
 app.use(express.json());
 app.use(cookieParser());
 app.use("/uploads", express.static(path.resolve(process.cwd(), "uploads")));
+app.use((req, res, next) => {
+    const requestId = `req_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+    req.requestId = requestId;
+    res.setHeader("X-Request-Id", requestId);
+    next();
+});
 
 app.get("/", (req, res) => {
     res.send("PostgreSQL + Express API is running Hello World!");
@@ -41,30 +47,53 @@ app.use("/api/v1/users", userManagementRoutes);
 
 // error handling middleware
 app.use((err, req, res, next) => {
-    console.log(err);
-    const statusCode = err.statusCode || 500;
-    const error = err.message || "Internal Server Error";
-    const errorCode =
-        err.errorCode ||
-        (statusCode === 401
-            ? ErrorCodes.UNAUTHORIZED
-            : statusCode === 403
-                ? ErrorCodes.FORBIDDEN
-                : statusCode === 404
-                    ? ErrorCodes.NOT_FOUND
-                    : statusCode >= 500
-                        ? ErrorCodes.DATABASE_ERROR
-                        : ErrorCodes.VALIDATION_ERROR);
+    const normalizedError = err instanceof CustomError
+        ? err
+        : new CustomError({
+            message: "Internal Server Error",
+            statusCode: 500,
+            code: ErrorCodes.INTERNAL_ERROR,
+            isOperational: false,
+            cause: err,
+            details: process.env.NODE_ENV !== "production" && err?.message
+                ? { originalMessage: err.message }
+                : null
+        });
+
+    const statusCode = normalizedError.statusCode || 500;
+    const timestamp = normalizedError.timestamp || new Date().toISOString();
+
+    console.error({
+        requestId: req.requestId,
+        method: req.method,
+        path: req.originalUrl,
+        statusCode,
+        code: normalizedError.code,
+        message: normalizedError.message,
+        isOperational: normalizedError.isOperational,
+        details: normalizedError.details || null,
+        timestamp,
+        stack: normalizedError.stack,
+        cause: normalizedError.cause?.message || null
+    });
 
     const response = {
         success: false,
-        error,
-        errorCode,
-        statusCode
+        error: {
+            message: normalizedError.message || "Internal Server Error",
+            code: normalizedError.code || ErrorCodes.INTERNAL_ERROR,
+            statusCode,
+            timestamp,
+            requestId: req.requestId
+        }
     };
 
-    if (err.details) {
-        response.details = err.details;
+    if (normalizedError.details) {
+        response.error.details = normalizedError.details;
+    }
+
+    if (process.env.NODE_ENV !== "production" && normalizedError.stack) {
+        response.error.stack = normalizedError.stack;
     }
 
     res.status(statusCode).json(response);

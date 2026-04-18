@@ -1,22 +1,32 @@
 import scholarshipService from "../services/scholarshipService.js";
 import asyncHandler from "../utils/asyncHandler.js";
+import { successResponse } from "../utils/customResponse.js";
+import { CustomError, ErrorCodes } from "../utils/customError.js";
 
 const getConfig = asyncHandler(async (req, res) => {
     const { courseId } = req.params;
     const config = await scholarshipService.getCourseScholarshipConfig(courseId);
-    res.json({ success: true, data: config });
+    successResponse(res, { data: config }, "Scholarship config fetched successfully");
 });
 
 const updateConfig = asyncHandler(async (req, res) => {
     const { course_id, configs } = req.body;
     const result = await scholarshipService.updateCourseScholarshipConfig(course_id, configs);
-    res.status(200).json({ success: true, ...result });
+    successResponse(res, result, "Scholarship config updated successfully");
 });
 
 const disburse = asyncHandler(async (req, res) => {
     const { disbursements } = req.body;
     if (!Array.isArray(disbursements)) {
-        return res.status(400).json({ success: false, message: "Invalid input" });
+        throw new CustomError({
+            message: "Invalid input",
+            statusCode: 400,
+            code: ErrorCodes.VALIDATION_ERROR,
+            details: {
+                field: "disbursements",
+                issue: "Expected an array"
+            }
+        });
     }
     const results = await scholarshipService.disburseScholarshipBatch(disbursements, {
         actorUserId: req.user.userId,
@@ -29,18 +39,18 @@ const disburse = asyncHandler(async (req, res) => {
         failed: results.filter(r => r.status === 'failed').length
     };
 
-    res.status(200).json({ success: true, summary, results });
+    successResponse(res, { summary, results }, "Scholarship disbursal processed successfully");
 });
 
 const getSummary = asyncHandler(async (req, res) => {
     const summary = await scholarshipService.getScholarshipSummary();
-    res.json({ success: true, data: summary });
+    successResponse(res, { data: summary }, "Scholarship summary fetched successfully");
 });
 
 const reverse = asyncHandler(async (req, res) => {
     const { txnId } = req.params;
     const result = await scholarshipService.reverseScholarship(txnId);
-    res.json({ success: true, ...result });
+    successResponse(res, result, "Scholarship reversed successfully");
 });
 
 const submitApplication = asyncHandler(async (req, res) => {
@@ -51,19 +61,19 @@ const submitApplication = asyncHandler(async (req, res) => {
         manualApplicationId: application_id,
         file: req.file
     });
-    res.status(201).json({ success: true, data: result, message: "Application submitted and pending verification" });
+    successResponse(res, { data: result }, "Application submitted and pending verification", 201);
 });
 
 const getMyApplication = asyncHandler(async (req, res) => {
     const result = await scholarshipService.getMyScholarshipApplication({
         actorUserId: req.user.userId
     });
-    res.json({ success: true, data: result });
+    successResponse(res, { data: result }, "Scholarship application fetched successfully");
 });
 
 const listApplications = asyncHandler(async (_req, res) => {
     const data = await scholarshipService.listStudentApplications();
-    res.json({ success: true, data });
+    successResponse(res, { data }, "Scholarship applications fetched successfully");
 });
 
 const reconcile = asyncHandler(async (req, res) => {
@@ -72,7 +82,7 @@ const reconcile = asyncHandler(async (req, res) => {
         actorRole: req.user.role,
         rows: req.body?.rows || []
     });
-    res.json({ success: true, data: result });
+    successResponse(res, { data: result }, "Government sheet reconciliation completed");
 });
 
 export default {
