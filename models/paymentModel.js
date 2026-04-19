@@ -96,10 +96,6 @@ const getStudentWithCourse = async (studentId) => {
 
 const findAllTransactions = async (params = {}) => {
     let query = `
-        SELECT 
-            ft.id, ft.student_id as "studentId", ft.amount_paid as "paidAmount", ft.payment_mode as "paymentMode", ft.payment_reference as "referenceNo",
-            ft.receipt_number as "receiptNo", TO_CHAR(ft.transaction_date, 'YYYY-MM-DD') as "date", ft.remarks, ft.created_at as "createdAt", ft.created_by as "recordedBy",
-            s.full_name as "studentName", c.course_name as "courseName", cb.batch_name as "batchName", sfl.academic_year as "year"
         FROM fee_transactions ft
         JOIN students s ON ft.student_id = s.id
         JOIN courses c ON s.course_id = c.id
@@ -120,9 +116,38 @@ const findAllTransactions = async (params = {}) => {
         values.push(params.startDate, params.endDate);
     }
 
-    query += ` ORDER BY ft.created_at DESC`;
-    const { rows } = await pool.query(query, values);
-    return rows;
+    if (params.paymentMode) {
+        query += ` AND ft.payment_mode = $${i++}`;
+        values.push(params.paymentMode);
+    }
+
+    // Count query
+    const countQuery = `SELECT COUNT(*) as total ${query}`;
+    const { rows: countRows } = await pool.query(countQuery, values);
+    const total = parseInt(countRows[0].total);
+
+    // Data query with ordering and pagination
+    let dataQuery = `
+        SELECT 
+            ft.id, ft.student_id as "studentId", ft.amount_paid as "paidAmount", ft.payment_mode as "paymentMode", ft.payment_reference as "referenceNo",
+            ft.receipt_number as "receiptNo", TO_CHAR(ft.transaction_date, 'YYYY-MM-DD') as "date", ft.remarks, ft.created_at as "createdAt", ft.created_by as "recordedBy",
+            s.full_name as "studentName", c.course_name as "courseName", cb.batch_name as "batchName", sfl.academic_year as "year",
+            s.mobile_number as "studentMobile", s.gender as "studentGender", s.caste_category as "studentCaste", s.prn_number as "prnNumber"
+        ${query}
+        ORDER BY ft.created_at DESC
+    `;
+
+    if (params.limit) {
+        dataQuery += ` LIMIT $${i++}`;
+        values.push(parseInt(params.limit));
+    }
+    if (params.offset) {
+        dataQuery += ` OFFSET $${i++}`;
+        values.push(parseInt(params.offset));
+    }
+
+    const { rows } = await pool.query(dataQuery, values);
+    return { transactions: rows, total };
 };
 
 export default {

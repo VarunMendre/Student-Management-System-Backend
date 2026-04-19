@@ -118,11 +118,12 @@ const getFeeLedger = async (studentId) => {
 };
 
 const getAllTransactions = async (filters = {}) => {
-    const rows = await paymentModel.findAllTransactions(filters);
-    return rows.map(row => ({
+    const { transactions, total } = await paymentModel.findAllTransactions(filters);
+    const rows = transactions.map(row => ({
         ...row,
         paidAmount: parseFloat(row.paidAmount || 0)
     }));
+    return { transactions: rows, total };
 };
 
 export default { createPayment, getTransactions, getTransactionById, getFeeLedger, getAllTransactions };

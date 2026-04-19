@@ -4,6 +4,6 @@ import { authorizeRoles } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
-router.get("/", authorizeRoles("principal", "accountant"), listAllTransactions);
+router.get("/", authorizeRoles("principal", "accountant", "admin"), listAllTransactions);
 
 export default router;
