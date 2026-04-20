@@ -2,6 +2,7 @@ import bcrypt from "bcryptjs";
 import userModel from "../models/userModel.js";
 import { generateToken, verifyToken } from "../utils/jwtHelper.js";
 import { CustomError, ErrorCodes } from "../utils/customError.js";
+import { normalizeEmail } from "../utils/studentOptions.js";
 
 const ACCESS_EXPIRY = process.env.JWT_ACCESS_EXPIRY || "15m";
 const REFRESH_EXPIRY = process.env.JWT_REFRESH_EXPIRY || "7d";
@@ -65,11 +66,20 @@ const loginUser = async ({ email, password, role }) => {
         });
     }
 
-    const user = await userModel.findByEmail(email);
+    const normalizedEmail = normalizeEmail(email);
+    const user = await userModel.findByEmail(normalizedEmail);
 
-    if (!user || user.role !== role) {
+    if (!user) {
         throw new CustomError({
-            message: "Invalid credentials",
+            message: "No account found for this email address",
+            statusCode: 401,
+            code: ErrorCodes.UNAUTHORIZED
+        });
+    }
+
+    if (user.role !== role) {
+        throw new CustomError({
+            message: `This account is registered as ${user.role}, not ${role}`,
             statusCode: 401,
             code: ErrorCodes.UNAUTHORIZED
         });
@@ -87,7 +97,7 @@ const loginUser = async ({ email, password, role }) => {
 
     if (!isPasswordValid) {
         throw new CustomError({
-            message: "Invalid credentials",
+            message: "Password is incorrect",
             statusCode: 401,
             code: ErrorCodes.UNAUTHORIZED
         });

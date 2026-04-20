@@ -149,6 +149,41 @@ const updateStudentPasswordChangedStatus = async (studentId, status = true) => {
     return rows[0] || null;
 };
 
+const updateStudentLinkedAccount = async (client, studentId, { name, email, contact_number }) => {
+    const updates = [];
+    const values = [];
+    let index = 1;
+
+    if (name !== undefined) {
+        updates.push(`name = $${index++}`);
+        values.push(name);
+    }
+    if (email !== undefined) {
+        updates.push(`email = $${index++}`);
+        values.push(email);
+    }
+    if (contact_number !== undefined) {
+        updates.push(`contact_number = $${index++}`);
+        values.push(contact_number);
+    }
+
+    if (!updates.length) {
+        return null;
+    }
+
+    updates.push(`updated_at = CURRENT_TIMESTAMP`);
+    values.push(studentId);
+
+    const { rows } = await client.query(
+        `UPDATE app_users
+         SET ${updates.join(", ")}
+         WHERE student_id = $${index}
+         RETURNING ${DEFAULT_USER_COLUMNS}`,
+        values
+    );
+    return rows[0] || null;
+};
+
 export default {
     findByEmail,
     findById,
@@ -161,5 +196,6 @@ export default {
     setActiveStatus,
     deleteById,
     updatePassword,
-    updateStudentPasswordChangedStatus
+    updateStudentPasswordChangedStatus,
+    updateStudentLinkedAccount
 };

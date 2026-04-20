@@ -178,19 +178,48 @@ const findStudents = async (filters = {}, pagination = {}) => {
             COALESCE(ledger.total_course_fee, 0) as total_course_fee,
             COALESCE(ledger.total_paid, 0) as total_paid,
             COALESCE(ledger.total_pending, 0) as total_pending,
+            COALESCE(ledger.fee_ledger, '[]'::jsonb) as fee_ledger,
+            ledger.current_academic_year,
             COALESCE(tx.transaction_count, 0) as transaction_count
         FROM students s
         JOIN departments d ON s.department_id = d.id
         JOIN courses c ON s.course_id = c.id
         JOIN course_batches cb ON s.batch_id = cb.id
-        LEFT JOIN (
-            SELECT student_id, 
-                   SUM(total_yearly_fee) as total_course_fee, 
-                   SUM(total_paid) as total_paid,
-                   SUM(pending_fee) as total_pending
-            FROM student_fee_ledger 
-            GROUP BY student_id
-        ) ledger ON s.id = ledger.student_id
+        LEFT JOIN LATERAL (
+            SELECT
+                SUM(sfl.total_yearly_fee) as total_course_fee,
+                SUM(sfl.total_paid) as total_paid,
+                SUM(sfl.pending_fee) as total_pending,
+                jsonb_agg(
+                    jsonb_build_object(
+                        'academic_year', sfl.academic_year,
+                        'academic_year_num', sfl.academic_year_num,
+                        'total_yearly_fee', sfl.total_yearly_fee,
+                        'total_paid', sfl.total_paid,
+                        'pending_fee', sfl.pending_fee,
+                        'status', sfl.status
+                    )
+                    ORDER BY sfl.academic_year_num ASC
+                ) as fee_ledger,
+                COALESCE(
+                    (
+                        SELECT sfl2.academic_year
+                        FROM student_fee_ledger sfl2
+                        WHERE sfl2.student_id = s.id AND sfl2.pending_fee > 0
+                        ORDER BY sfl2.academic_year_num ASC
+                        LIMIT 1
+                    ),
+                    (
+                        SELECT sfl3.academic_year
+                        FROM student_fee_ledger sfl3
+                        WHERE sfl3.student_id = s.id
+                        ORDER BY sfl3.academic_year_num DESC
+                        LIMIT 1
+                    )
+                ) as current_academic_year
+            FROM student_fee_ledger sfl
+            WHERE sfl.student_id = s.id
+        ) ledger ON TRUE
         LEFT JOIN (
             SELECT student_id, COUNT(id) as transaction_count 
             FROM fee_transactions 
@@ -224,6 +253,11 @@ const updateStudentById = async (id, data) => {
         "alternate_number",
         "prn_number",
         "eligibility_number",
+        "department_id",
+        "course_id",
+        "batch_id",
+        "caste_category",
+        "gender",
         "enrollment_status"
     ];
     const updates = [];
@@ -250,7 +284,7 @@ const updateStudentById = async (id, data) => {
         `UPDATE students
          SET ${updates.join(", ")}
          WHERE id = $${paramIndex}
-         RETURNING id, full_name, email, mobile_number, alternate_number, prn_number, eligibility_number, enrollment_status, updated_at`,
+         RETURNING id, full_name, email, mobile_number, alternate_number, prn_number, eligibility_number, department_id, course_id, batch_id, caste_category, gender, enrollment_status, updated_at`,
         values
     );
 };

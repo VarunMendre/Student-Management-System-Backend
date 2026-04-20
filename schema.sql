@@ -53,7 +53,7 @@ CREATE TABLE IF NOT EXISTS students (
     department_id       INTEGER NOT NULL REFERENCES departments(id),
     course_id           INTEGER NOT NULL REFERENCES courses(id),
     batch_id            INTEGER NOT NULL REFERENCES course_batches(id),
-    caste_category      VARCHAR(50) NOT NULL,
+    caste_category      VARCHAR(50) NOT NULL CHECK (caste_category IN ('General', 'OBC', 'SC', 'ST', 'SBC', 'VJ', 'NT-A', 'NT-B', 'NT-C', 'NT-D', 'EWS')),
     gender              VARCHAR(10) NOT NULL CHECK (gender IN ('Male', 'Female', 'Other')),
     enrollment_status   VARCHAR(20) DEFAULT 'Active' CHECK (enrollment_status IN ('Active', 'Inactive', 'Graduated', 'Dropped')),
     is_password_changed BOOLEAN DEFAULT FALSE,
@@ -134,12 +134,24 @@ CREATE TABLE IF NOT EXISTS fee_transactions (
 CREATE TABLE IF NOT EXISTS course_scholarship_config (
     id SERIAL PRIMARY KEY,
     course_id INTEGER REFERENCES courses(id) ON DELETE CASCADE,
-    caste_category VARCHAR(50) NOT NULL,
+    caste_category VARCHAR(50) NOT NULL CHECK (caste_category IN ('General', 'OBC', 'SC', 'ST', 'SBC', 'VJ', 'NT-A', 'NT-B', 'NT-C', 'NT-D', 'EWS')),
     gender VARCHAR(10) NOT NULL CHECK (gender IN ('Male', 'Female')),
     max_amount DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
     is_active BOOLEAN DEFAULT TRUE,
     UNIQUE(course_id, caste_category, gender)
 );
+
+-- Scholarship audit trail (minimal immutable logs)
+CREATE TABLE IF NOT EXISTS scholarship_audit_logs (
+    id SERIAL PRIMARY KEY,
+    application_id INTEGER REFERENCES scholarship_applications(id) ON DELETE SET NULL,
+    actor_user_id INTEGER REFERENCES app_users(id) ON DELETE SET NULL,
+    actor_role VARCHAR(20) NOT NULL,
+    action VARCHAR(50) NOT NULL,
+    details JSONB DEFAULT '{}'::jsonb,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 
 -- ============================================
 -- Indexes for performance
@@ -207,16 +219,6 @@ CREATE INDEX IF NOT EXISTS idx_sch_app_student ON scholarship_applications(stude
 CREATE INDEX IF NOT EXISTS idx_sch_app_status ON scholarship_applications(submission_status);
 CREATE INDEX IF NOT EXISTS idx_sch_app_submitted ON scholarship_applications(submitted_at DESC);
 
--- Scholarship audit trail (minimal immutable logs)
-CREATE TABLE IF NOT EXISTS scholarship_audit_logs (
-    id SERIAL PRIMARY KEY,
-    application_id INTEGER REFERENCES scholarship_applications(id) ON DELETE SET NULL,
-    actor_user_id INTEGER REFERENCES app_users(id) ON DELETE SET NULL,
-    actor_role VARCHAR(20) NOT NULL,
-    action VARCHAR(50) NOT NULL,
-    details JSONB DEFAULT '{}'::jsonb,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
 
 CREATE INDEX IF NOT EXISTS idx_sch_audit_application ON scholarship_audit_logs(application_id);
 CREATE INDEX IF NOT EXISTS idx_sch_audit_created ON scholarship_audit_logs(created_at DESC);

@@ -17,6 +17,7 @@ export class CustomError extends Error {
         statusCode = 500,
         code = ErrorCodes.INTERNAL_ERROR,
         details = null,
+        fieldErrors = null,
         isOperational = true,
         cause = null,
         timestamp = new Date().toISOString()
@@ -31,6 +32,7 @@ export class CustomError extends Error {
         this.timestamp = timestamp;
         if (cause) this.cause = cause;
         if (details) this.details = details;
+        if (fieldErrors) this.fieldErrors = fieldErrors;
 
         Error.captureStackTrace?.(this, this.constructor);
     }

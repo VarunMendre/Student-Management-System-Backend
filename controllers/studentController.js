@@ -2,6 +2,11 @@ import studentService from "../services/studentService.js";
 import asyncHandler from "../utils/asyncHandler.js";
 import { successResponse } from "../utils/customResponse.js";
 
+export const getStudentMetadata = asyncHandler(async (_req, res) => {
+    const result = await studentService.getStudentMetadata();
+    successResponse(res, { data: result }, "Student metadata fetched successfully");
+});
+
 export const enrollStudent = asyncHandler(async (req, res) => {
     const result = await studentService.enrollStudent(req.body);
     successResponse(res, result, "Student enrolled successfully", 201);

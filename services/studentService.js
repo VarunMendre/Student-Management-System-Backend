@@ -4,11 +4,20 @@ import studentModel from "../models/studentModel.js";
 import userModel from "../models/userModel.js";
 import { withTransaction } from "../utils/dbUtils.js";
 import bcrypt from "bcryptjs";
+import { getStudentMetadataOptions } from "../utils/studentOptions.js";
 
 const parseCurrencyFields = (rows = [], fields = []) =>
     rows.map((row) => ({
         ...row,
         ...Object.fromEntries(fields.map((field) => [field, parseFloat(row[field])]))
+    }));
+
+const parseLedgerFields = (rows = []) =>
+    rows.map((row) => ({
+        ...row,
+        total_yearly_fee: parseFloat(row.total_yearly_fee),
+        total_paid: parseFloat(row.total_paid),
+        pending_fee: parseFloat(row.pending_fee)
     }));
 
 const parsePaginationValue = (value, fallback) => {
@@ -116,6 +125,8 @@ const enrollStudent = async (data) => {
     });
 };
 
+const getStudentMetadata = async () => getStudentMetadataOptions();
+
 const listStudents = async (filters = {}) => {
     const safePage = parsePaginationValue(filters.page, 1);
     const safeLimit = parsePaginationValue(filters.limit, 10);
@@ -132,6 +143,7 @@ const listStudents = async (filters = {}) => {
             total_course_fee: parseFloat(row.total_course_fee),
             total_paid: parseFloat(row.total_paid),
             total_pending: parseFloat(row.total_pending),
+            fee_ledger: parseLedgerFields(Array.isArray(row.fee_ledger) ? row.fee_ledger : []),
             transaction_count: parseInt(row.transaction_count, 10)
         })),
         pagination: {
@@ -173,7 +185,21 @@ const updateStudent = async (id, data) => {
     });
 
     try {
-        const updatedStudent = await studentModel.updateStudentById(id, data);
+        const updatedStudent = await withTransaction(async (client) => {
+            const nextStudent = await studentModel.updateStudentById(id, data);
+
+            if (!nextStudent) {
+                return null;
+            }
+
+            await userModel.updateStudentLinkedAccount(client, id, {
+                name: data.full_name,
+                email: data.email,
+                contact_number: data.mobile_number
+            });
+
+            return nextStudent;
+        });
 
         if (!updatedStudent) {
             throw new CustomError({
@@ -197,4 +223,4 @@ const updateStudent = async (id, data) => {
     }
 };
 
-export default { enrollStudent, listStudents, getStudentById, updateStudent };
+export default { enrollStudent, getStudentMetadata, listStudents, getStudentById, updateStudent };
