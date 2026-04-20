@@ -34,6 +34,11 @@ export const getMe = asyncHandler(async (req, res) => {
     successResponse(res, { user }, "Current user fetched successfully");
 });
 
+export const updateMe = asyncHandler(async (req, res) => {
+    const user = await authService.updateCurrentUser(req.user.userId, req.body);
+    successResponse(res, { user }, "Profile updated successfully");
+});
+
 export const resetPassword = asyncHandler(async (req, res) => {
     const user = await authService.resetUserPassword(req.user.userId, req.body);
     successResponse(res, { user }, "Password reset successful");

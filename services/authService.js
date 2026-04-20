@@ -158,6 +158,65 @@ const getCurrentUser = async (userId) => {
     return sanitizeUser(user);
 };
 
+const updateCurrentUser = async (userId, { name, email, contact_number }) => {
+    const trimmedName = String(name || "").trim();
+    const trimmedEmail = String(email || "").trim().toLowerCase();
+    const trimmedContactNumber = String(contact_number || "").trim();
+
+    if (!trimmedName || !trimmedEmail || !trimmedContactNumber) {
+        throw new CustomError({
+            message: "Name, email and contact number are required",
+            statusCode: 400,
+            code: ErrorCodes.VALIDATION_ERROR
+        });
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(trimmedEmail)) {
+        throw new CustomError({
+            message: "Enter a valid email address",
+            statusCode: 400,
+            code: ErrorCodes.VALIDATION_ERROR
+        });
+    }
+
+    const phoneRegex = /^[0-9+\-\s]{10,15}$/;
+    if (!phoneRegex.test(trimmedContactNumber)) {
+        throw new CustomError({
+            message: "Enter a valid contact number",
+            statusCode: 400,
+            code: ErrorCodes.VALIDATION_ERROR
+        });
+    }
+
+    const user = await userModel.findById(userId);
+
+    if (!user) {
+        throw new CustomError({
+            message: "User not found",
+            statusCode: 404,
+            code: ErrorCodes.NOT_FOUND
+        });
+    }
+
+    const existingUser = await userModel.findByEmailExcludingId(trimmedEmail, userId);
+    if (existingUser) {
+        throw new CustomError({
+            message: "Email is already in use",
+            statusCode: 409,
+            code: ErrorCodes.CONFLICT
+        });
+    }
+
+    const updatedUser = await userModel.updateProfile(userId, {
+        name: trimmedName,
+        email: trimmedEmail,
+        contact_number: trimmedContactNumber
+    });
+
+    return sanitizeUser(updatedUser);
+};
+
 const resetUserPassword = async (userId, { currentPassword, newPassword }) => {
     if (!newPassword) {
         throw new CustomError({
@@ -213,5 +272,6 @@ export default {
     refreshSession,
     logoutUser,
     getCurrentUser,
+    updateCurrentUser,
     resetUserPassword
 };

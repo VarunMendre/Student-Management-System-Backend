@@ -24,6 +24,16 @@ const findByEmail = async (email) => {
     return rows[0] || null;
 };
 
+const findByEmailExcludingId = async (email, id) => {
+    const { rows } = await pool.query(
+        `SELECT ${DEFAULT_USER_COLUMNS}
+         FROM app_users
+         WHERE email = $1 AND id <> $2`,
+        [email, id]
+    );
+    return rows[0] || null;
+};
+
 const findById = async (id) => {
     const { rows } = await pool.query(
         `SELECT ${DEFAULT_USER_COLUMNS}
@@ -135,6 +145,20 @@ const updatePassword = async (id, hashedPassword) => {
     return rows[0] || null;
 };
 
+const updateProfile = async (id, { name, email, contact_number }) => {
+    const { rows } = await pool.query(
+        `UPDATE app_users
+         SET name = $2,
+             email = $3,
+             contact_number = $4,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE id = $1
+         RETURNING ${DEFAULT_USER_COLUMNS}`,
+        [id, name, email, contact_number]
+    );
+    return rows[0] || null;
+};
+
 const updateStudentPasswordChangedStatus = async (studentId, status = true) => {
     if (!studentId) return null;
 
@@ -151,6 +175,7 @@ const updateStudentPasswordChangedStatus = async (studentId, status = true) => {
 
 export default {
     findByEmail,
+    findByEmailExcludingId,
     findById,
     findByIdWithPassword,
     updateRefreshToken,
@@ -161,5 +186,6 @@ export default {
     setActiveStatus,
     deleteById,
     updatePassword,
+    updateProfile,
     updateStudentPasswordChangedStatus
 };
