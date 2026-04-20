@@ -6,7 +6,7 @@ import path from "path";
 import { PDFParse } from "pdf-parse";
 import { createWorker } from "tesseract.js";
 import { CustomError, ErrorCodes } from "../utils/customError.js";
-import { extractApplicationIdFromPdfText, getAcademicCycle, normalizeApplicationId } from "../utils/scholarshipParser.js";
+import { extractApplicationIdFromPdfText, getAcademicCycle, normalizeApplicationId, textContainsApplicationId } from "../utils/scholarshipParser.js";
 
 const getCourseScholarshipConfig = async (courseId) => {
     return await scholarshipModel.getConfigByCourse(courseId);
@@ -113,6 +113,7 @@ const submitScholarshipApplication = async ({ actorUserId, actorRole, manualAppl
     }
 
     let extractedId = null;
+    const isImageUpload = file.mimetype !== "application/pdf";
     try {
         let detectedText = "";
         if (file.mimetype === "application/pdf") {
@@ -125,6 +126,11 @@ const submitScholarshipApplication = async ({ actorUserId, actorRole, manualAppl
             detectedText = await extractTextFromImage(file.path);
         }
         extractedId = extractApplicationIdFromPdfText(detectedText.toUpperCase());
+
+        // OCR on images can miss separators or confuse lookalike characters.
+        if (!extractedId && textContainsApplicationId(detectedText, normalizedManualId)) {
+            extractedId = normalizedManualId;
+        }
     } catch (_error) {
         await deleteFileSafely(file.path);
         throw new CustomError({
@@ -135,12 +141,16 @@ const submitScholarshipApplication = async ({ actorUserId, actorRole, manualAppl
     }
 
     if (!extractedId) {
-        await deleteFileSafely(file.path);
-        throw new CustomError({
-            message: "Application ID was not detected in the uploaded file",
-            statusCode: 422,
-            code: ErrorCodes.VALIDATION_ERROR
-        });
+        if (isImageUpload && normalizedManualId) {
+            extractedId = normalizedManualId;
+        } else {
+            await deleteFileSafely(file.path);
+            throw new CustomError({
+                message: "Application ID was not detected in the uploaded file",
+                statusCode: 422,
+                code: ErrorCodes.VALIDATION_ERROR
+            });
+        }
     }
 
     if (normalizedManualId !== extractedId) {
@@ -188,7 +198,8 @@ const submitScholarshipApplication = async ({ actorUserId, actorRole, manualAppl
             actorRole,
             action: "submitted",
             details: {
-                application_id: normalizedManualId
+                application_id: normalizedManualId,
+                image_ocr_fallback_used: isImageUpload && extractedId === normalizedManualId
             }
         });
 

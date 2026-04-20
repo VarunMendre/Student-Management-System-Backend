@@ -221,11 +221,7 @@ export default {
     setActiveStatus,
     deleteById,
     updatePassword,
-<<<<<<< HEAD
     updateProfile,
-    updateStudentPasswordChangedStatus
-=======
     updateStudentPasswordChangedStatus,
     updateStudentLinkedAccount
->>>>>>> varun-backend
 };
