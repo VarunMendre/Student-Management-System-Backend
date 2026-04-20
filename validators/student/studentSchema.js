@@ -1,32 +1,44 @@
 import { z } from "zod";
+import {
+    STUDENT_CASTE_CATEGORIES,
+    STUDENT_ENROLLMENT_STATUSES,
+    STUDENT_GENDERS,
+    normalizeEmail,
+    normalizePhone,
+    normalizeText
+} from "../../utils/studentOptions.js";
 
 // Regex Patterns
 const idRegex = /^\d+$/;
 const phoneRegex = /^\d{10,15}$/;
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-const casteCategories = ["General", "EWS", "OBC", "SC", "ST", "VJA", "NTB", "NTC", "NTD", "SBC", "SEBC", "VJNT", "NT-A", "NT-B", "NT-C", "NT-D"];
-const genderOptions = ["Male", "Female", "Other"];
-const statusOptions = ["Active", "Inactive", "Graduated", "Dropped"];
+const optionalString = () => z.union([z.string(), z.null()]).optional();
+const normalizedNameSchema = z.string().transform(normalizeText).pipe(z.string().min(2, "Full name must be at least 2 characters").max(150));
+const normalizedEmailSchema = z.string().transform(normalizeEmail).pipe(z.string().regex(emailRegex, "Invalid email format").max(150));
+const normalizedPhoneSchema = z.string().transform(normalizePhone).pipe(z.string().regex(phoneRegex, "Mobile number must be 10-15 digits"));
+const normalizedOptionalIdText = optionalString().transform((value) => {
+    const normalized = normalizeText(value || "");
+    return normalized || null;
+});
 
 export const studentSchemas = {
     // Schema for POST /api/v1/students (Enrollment)
     enroll: z.object({
         body: z.object({
-            full_name: z.string().min(2, "Full name must be at least 2 characters").max(150),
-            email: z.string().regex(emailRegex, "Invalid email format").max(150),
-            mobile_number: z.string().regex(phoneRegex, "Mobile number must be 10-15 digits"),
-            alternate_number: z.string().regex(phoneRegex, "Alternate number must be 10-15 digits"),
-            prn_number: z.string().max(50).nullable().optional().default(null),
-            eligibility_number: z.string().max(50).nullable().optional().default(null),
+            full_name: normalizedNameSchema,
+            email: normalizedEmailSchema,
+            mobile_number: normalizedPhoneSchema,
+            alternate_number: normalizedPhoneSchema,
+            prn_number: normalizedOptionalIdText,
+            eligibility_number: normalizedOptionalIdText,
             department_id: z.number().int().positive().or(z.string().regex(idRegex).transform(Number)),
             course_id: z.number().int().positive().or(z.string().regex(idRegex).transform(Number)),
             batch_id: z.number().int().positive().or(z.string().regex(idRegex).transform(Number)),
-            caste_category: z.enum(casteCategories, {
-                errorMap: () => ({ message: `Caste category must be one of: ${casteCategories.join(", ")}` })
+            caste_category: z.enum(STUDENT_CASTE_CATEGORIES, {
+                errorMap: () => ({ message: `Caste category must be one of: ${STUDENT_CASTE_CATEGORIES.join(", ")}` })
             }),
-            gender: z.enum(genderOptions, {
-                errorMap: () => ({ message: `Gender must be one of: ${genderOptions.join(", ")}` })
+            gender: z.enum(STUDENT_GENDERS, {
+                errorMap: () => ({ message: `Gender must be one of: ${STUDENT_GENDERS.join(", ")}` })
             })
         })
     }),
@@ -37,13 +49,18 @@ export const studentSchemas = {
             id: z.string().regex(idRegex, "Invalid student ID format")
         }),
         body: z.object({
-            full_name: z.string().min(2).max(150).optional(),
-            email: z.string().regex(emailRegex, "Invalid email format").max(150).optional(),
-            mobile_number: z.string().regex(phoneRegex, "Mobile number must be 10-15 digits").optional(),
-            alternate_number: z.string().regex(phoneRegex, "Alternate number must be 10-15 digits").optional(),
-            prn_number: z.string().max(50).nullable().optional(),
-            eligibility_number: z.string().max(50).nullable().optional(),
-            enrollment_status: z.enum(statusOptions).optional()
+            full_name: normalizedNameSchema.optional(),
+            email: normalizedEmailSchema.optional(),
+            mobile_number: normalizedPhoneSchema.optional(),
+            alternate_number: normalizedPhoneSchema.optional(),
+            prn_number: normalizedOptionalIdText,
+            eligibility_number: normalizedOptionalIdText,
+            department_id: z.number().int().positive().or(z.string().regex(idRegex).transform(Number)).optional(),
+            course_id: z.number().int().positive().or(z.string().regex(idRegex).transform(Number)).optional(),
+            batch_id: z.number().int().positive().or(z.string().regex(idRegex).transform(Number)).optional(),
+            caste_category: z.enum(STUDENT_CASTE_CATEGORIES).optional(),
+            gender: z.enum(STUDENT_GENDERS).optional(),
+            enrollment_status: z.enum(STUDENT_ENROLLMENT_STATUSES).optional()
         }).refine(obj => Object.keys(obj).length > 0, {
             message: "At least one field must be provided for update"
         })
@@ -55,7 +72,7 @@ export const studentSchemas = {
             department_id: z.string().regex(idRegex).transform(Number).optional(),
             course_id: z.string().regex(idRegex).transform(Number).optional(),
             batch_id: z.string().regex(idRegex).transform(Number).optional(),
-            status: z.enum(statusOptions).optional(),
+            status: z.enum(STUDENT_ENROLLMENT_STATUSES).optional(),
             search: z.string().max(100).optional(),
             page: z.coerce.number().int().positive().default(1),
             limit: z.coerce.number().int().positive().max(100).default(10)
@@ -67,5 +84,6 @@ export const studentSchemas = {
         params: z.object({
             id: z.string().regex(idRegex, "Invalid student ID format")
         })
-    })
+    }),
+    metadata: z.object({})
 };

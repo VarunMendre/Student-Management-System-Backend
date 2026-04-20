@@ -91,6 +91,9 @@ app.use((err, req, res, next) => {
     if (normalizedError.details) {
         response.error.details = normalizedError.details;
     }
+    if (normalizedError.fieldErrors) {
+        response.error.fieldErrors = normalizedError.fieldErrors;
+    }
 
     if (process.env.NODE_ENV !== "production" && normalizedError.stack) {
         response.error.stack = normalizedError.stack;
