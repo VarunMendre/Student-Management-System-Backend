@@ -79,6 +79,31 @@ export const studentSchemas = {
         }).optional().default({})
     }),
 
+    // Schema for POST /api/v1/students/bulk-import
+    bulkImport: z.object({
+        body: z.object({
+            department_id: z.number().int().positive().or(z.string().regex(idRegex).transform(Number)),
+            course_id: z.number().int().positive().or(z.string().regex(idRegex).transform(Number)),
+            batch_id: z.number().int().positive().or(z.string().regex(idRegex).transform(Number)),
+            students: z.array(
+                z.object({
+                    full_name: normalizedNameSchema,
+                    email: normalizedEmailSchema,
+                    mobile_number: normalizedPhoneSchema,
+                    alternate_number: normalizedPhoneSchema,
+                    caste_category: z.enum(STUDENT_CASTE_CATEGORIES, {
+                        errorMap: () => ({ message: `Category must be one of: ${STUDENT_CASTE_CATEGORIES.join(", ")}` })
+                    }),
+                    gender: z.enum(STUDENT_GENDERS, {
+                        errorMap: () => ({ message: `Gender must be one of: ${STUDENT_GENDERS.join(", ")}` })
+                    }),
+                    prn_number: normalizedOptionalIdText,
+                    eligibility_number: normalizedOptionalIdText
+                })
+            ).min(1).max(500)
+        })
+    }),
+
     // Schema for GET /api/v1/students/:id
     byId: z.object({
         params: z.object({

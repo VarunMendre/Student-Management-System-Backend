@@ -35,3 +35,10 @@ export const updateStudent = asyncHandler(async (req, res) => {
     const result = await studentService.updateStudent(parseInt(req.params.id), req.body);
     successResponse(res, result, "Student updated successfully");
 });
+
+export const bulkImportStudents = asyncHandler(async (req, res) => {
+    const result = await studentService.bulkImportStudents(req.body);
+    successResponse(res, result, "Students imported successfully", 201);
+});
+
+export default { enrollStudent, getStudentMetadata, listStudents, getStudent, updateStudent, bulkImportStudents };

@@ -328,6 +328,15 @@ const updateStudentById = async (id, data) => {
     );
 };
 
+const findExistingEmails = async (emails = []) => {
+    if (!emails.length) return [];
+    const res = await pool.query(
+        "SELECT email FROM students WHERE email = ANY($1)",
+        [emails]
+    );
+    return res.rows.map(r => r.email);
+};
+
 export default {
     getBatchWithDetails,
     getCourseDeptId,
@@ -344,5 +353,6 @@ export default {
     update,
     findStudents,
     countStudents,
-    updateStudentById
+    updateStudentById,
+    findExistingEmails
 };

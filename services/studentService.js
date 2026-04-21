@@ -228,4 +228,89 @@ const updateStudent = async (id, data) => {
     }
 };
 
-export default { enrollStudent, getStudentMetadata, listStudents, getStudentById, updateStudent };
+const bulkImportStudents = async (data) => {
+    const { department_id, course_id, batch_id, students } = data;
+
+    // 1. Validate Batch/Course/Dept
+    const batch = await studentModel.getBatchWithDetails(batch_id);
+    if (!batch) throw new CustomError({ message: "Batch not found", statusCode: 404, code: ErrorCodes.NOT_FOUND });
+    if (!batch.is_active) throw new CustomError({ message: "Batch is inactive", statusCode: 400, code: ErrorCodes.VALIDATION_ERROR });
+    if (batch.course_id !== course_id) throw new CustomError({ message: "Batch mismatch", statusCode: 400, code: ErrorCodes.VALIDATION_ERROR });
+
+    const course = await studentModel.getCourseDeptId(course_id);
+    if (!course) throw new CustomError({ message: "Course not found", statusCode: 404, code: ErrorCodes.NOT_FOUND });
+    if (course.department_id !== department_id) throw new CustomError({ message: "Department mismatch", statusCode: 400, code: ErrorCodes.VALIDATION_ERROR });
+
+    // 2. Check Capacity
+    const enrolledCount = await studentModel.getEnrolledCount(batch_id);
+    if (enrolledCount + students.length > batch.total_seats) {
+        throw new CustomError({
+            message: `Batch capacity exceeded. Current: ${enrolledCount}, Total: ${batch.total_seats}, Attempted: ${students.length}`,
+            statusCode: 409,
+            code: ErrorCodes.BATCH_FULL
+        });
+    }
+
+    // 3. Duplicate checks (Internal & External)
+    const emails = students.map(s => s.email);
+    const internalDuplicates = emails.filter((email, index) => emails.indexOf(email) !== index);
+    if (internalDuplicates.length > 0) {
+        throw new CustomError({
+            message: `Duplicate emails found in the uploaded file: ${[...new Set(internalDuplicates)].join(", ")}`,
+            statusCode: 400,
+            code: ErrorCodes.VALIDATION_ERROR
+        });
+    }
+
+    const existingEmailsInDb = await studentModel.findExistingEmails(emails);
+    if (existingEmailsInDb.length > 0) {
+        throw new CustomError({
+            message: `The following emails already exist in the system: ${existingEmailsInDb.join(", ")}`,
+            statusCode: 409,
+            code: ErrorCodes.DUPLICATE_ENTRY
+        });
+    }
+
+    // 4. Batch Fees & Labels
+    const batchFees = await studentModel.getBatchFeesByYear(batch_id);
+    const yearLabels = getAcademicYearLabels(batch.duration);
+
+    // 5. Transactional Import
+    return withTransaction(async (client) => {
+        const importedStudents = [];
+        for (const studentData of students) {
+            // Add required parent IDs
+            const fullStudentData = {
+                ...studentData,
+                department_id,
+                course_id,
+                batch_id
+            };
+
+            const student = await studentModel.createStudent(client, fullStudentData);
+            const hashedPassword = await bcrypt.hash(`${studentData.mobile_number}`, 12);
+
+            await userModel.createStudentUser(client, {
+                name: studentData.full_name,
+                email: studentData.email,
+                password: hashedPassword,
+                contact_number: studentData.mobile_number,
+                role: "student",
+                student_id: student.id,
+                is_password_changed: false
+            });
+
+            for (let i = 0; i < yearLabels.length; i++) {
+                const yr = yearLabels[i];
+                const yearlyFee = batchFees[yr] || 0;
+                await studentModel.createFeeLedger(client, {
+                    student_id: student.id, academic_year: yr, academic_year_num: i + 1, total_yearly_fee: yearlyFee
+                });
+            }
+            importedStudents.push(student);
+        }
+        return { count: importedStudents.length };
+    });
+};
+
+export default { enrollStudent, getStudentMetadata, listStudents, getStudentById, updateStudent, bulkImportStudents };

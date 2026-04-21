@@ -1,5 +1,5 @@
 import express from "express";
-import { enrollStudent, listStudents, getStudent, getStudentMetadata, updateStudent } from "../controllers/studentController.js";
+import { enrollStudent, listStudents, getStudent, getStudentMetadata, updateStudent, bulkImportStudents } from "../controllers/studentController.js";
 import { createPayment, getTransactions, getTransactionById, getFeeLedger } from "../controllers/paymentController.js";
 import { authorizeRoles, authorizeStudentOrRoles, requireStudentOwnership } from "../middleware/authMiddleware.js";
 import { validate } from "../validators/index.js";
@@ -13,6 +13,7 @@ const router = express.Router();
 // ========================
 router.get("/meta/options", authorizeRoles("principal", "accountant", "admin"), validate(studentSchemas.metadata), getStudentMetadata);
 router.post("/", authorizeRoles("principal", "accountant"), validate(studentSchemas.enroll), enrollStudent);
+router.post("/bulk-import", authorizeRoles("principal", "accountant"), validate(studentSchemas.bulkImport), bulkImportStudents);
 router.get("/", authorizeRoles("principal", "accountant", "admin"), validate(studentSchemas.list), listStudents);
 router.get("/:id", authorizeStudentOrRoles("principal", "accountant", "admin"), validate(studentSchemas.byId), requireStudentOwnership("id"), getStudent);
 router.patch("/:id", authorizeRoles("principal", "accountant"), validate(studentSchemas.update), updateStudent);
