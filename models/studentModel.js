@@ -122,11 +122,49 @@ const findByIdWithDetails = async (id) => {
             s.*, 
             d.name as department_name,
             c.course_name,
-            cb.batch_name
+            cb.batch_name,
+            COALESCE(ledger.total_course_fee, 0) as total_course_fee,
+            COALESCE(ledger.total_paid, 0) as total_paid,
+            COALESCE(ledger.total_pending, 0) as total_pending,
+            COALESCE(tx.scholarship_paid, 0) as scholarship_paid,
+            COALESCE(tx.regular_paid, 0) as regular_paid,
+            ledger.current_academic_year
          FROM students s
          JOIN departments d ON s.department_id = d.id
          JOIN courses c ON s.course_id = c.id
          JOIN course_batches cb ON s.batch_id = cb.id
+         LEFT JOIN LATERAL (
+            SELECT
+                SUM(sfl.total_yearly_fee) as total_course_fee,
+                SUM(sfl.total_paid) as total_paid,
+                SUM(sfl.pending_fee) as total_pending,
+                COALESCE(
+                    (
+                        SELECT sfl2.academic_year
+                        FROM student_fee_ledger sfl2
+                        WHERE sfl2.student_id = s.id AND sfl2.pending_fee > 0
+                        ORDER BY sfl2.academic_year_num ASC
+                        LIMIT 1
+                    ),
+                    (
+                        SELECT sfl3.academic_year
+                        FROM student_fee_ledger sfl3
+                        WHERE sfl3.student_id = s.id
+                        ORDER BY sfl3.academic_year_num DESC
+                        LIMIT 1
+                    )
+                ) as current_academic_year
+            FROM student_fee_ledger sfl
+            WHERE sfl.student_id = s.id
+         ) ledger ON TRUE
+         LEFT JOIN LATERAL (
+            SELECT
+                SUM(CASE WHEN ft.payment_mode = 'Scholarship' THEN ft.amount_paid ELSE 0 END) as scholarship_paid,
+                SUM(CASE WHEN ft.payment_mode <> 'Scholarship' THEN ft.amount_paid ELSE 0 END) as regular_paid
+            FROM fee_transactions ft
+            WHERE ft.student_id = s.id
+              AND ft.status = 'Active'
+         ) tx ON TRUE
          WHERE s.id = $1`,
         [id]
     );
@@ -151,6 +189,7 @@ const getRecentTransactionsByStudent = async (studentId, limit = 20) => {
          FROM fee_transactions ft
          JOIN student_fee_ledger sfl ON ft.ledger_id = sfl.id
          WHERE ft.student_id = $1
+           AND ft.status = 'Active'
          ORDER BY ft.created_at DESC
          LIMIT $2`,
         [studentId, limit]

@@ -144,6 +144,39 @@ const getStudentForScholarship = async (studentId) => {
     return res.rows[0] || null;
 };
 
+const getStudentOutstandingSummary = async (studentId) => {
+    const res = await pool.query(`
+        SELECT
+            s.id as student_id,
+            COALESCE(SUM(sfl.total_yearly_fee), 0) as total_course_fee,
+            COALESCE(SUM(sfl.total_paid), 0) as total_paid,
+            COALESCE(SUM(sfl.pending_fee), 0) as total_pending
+        FROM students s
+        LEFT JOIN student_fee_ledger sfl ON s.id = sfl.student_id
+        WHERE s.id = $1
+        GROUP BY s.id
+    `, [studentId]);
+    return res.rows[0] || null;
+};
+
+const getOutstandingSummariesByStudentIds = async (studentIds = []) => {
+    if (!studentIds.length) return [];
+
+    const res = await pool.query(`
+        SELECT
+            s.id as student_id,
+            COALESCE(SUM(sfl.total_yearly_fee), 0) as total_course_fee,
+            COALESCE(SUM(sfl.total_paid), 0) as total_paid,
+            COALESCE(SUM(sfl.pending_fee), 0) as total_pending
+        FROM students s
+        LEFT JOIN student_fee_ledger sfl ON s.id = sfl.student_id
+        WHERE s.id = ANY($1::int[])
+        GROUP BY s.id
+    `, [studentIds]);
+
+    return res.rows;
+};
+
 const getScholarshipConfigForStudent = async (courseId, category, gender) => {
     const categoryCandidates = getCategoryCandidates(category);
     const loweredCandidates = categoryCandidates.map((item) => item.toLowerCase());
@@ -165,22 +198,40 @@ const getScholarshipConfigForStudent = async (courseId, category, gender) => {
 };
 
 const findApplicationByStudentAndCycle = async (studentId, _academicCycle = null) => {
+    const academicCycle = _academicCycle || null;
     const res = await pool.query(`
         SELECT *
         FROM scholarship_applications
         WHERE student_id = $1
+          AND ($2::text IS NULL OR academic_cycle = $2 OR academic_cycle IS NULL)
+        ORDER BY
+            CASE
+                WHEN academic_cycle = $2 THEN 0
+                WHEN academic_cycle IS NULL THEN 1
+                ELSE 2
+            END,
+            submitted_at DESC
         LIMIT 1
-    `, [studentId]);
+    `, [studentId, academicCycle]);
     return res.rows[0] || null;
 };
 
 const findApplicationByIdAndCycle = async (applicationId, _academicCycle = null) => {
+    const academicCycle = _academicCycle || null;
     const res = await pool.query(`
         SELECT *
         FROM scholarship_applications
         WHERE application_id = $1
+          AND ($2::text IS NULL OR academic_cycle = $2 OR academic_cycle IS NULL)
+        ORDER BY
+            CASE
+                WHEN academic_cycle = $2 THEN 0
+                WHEN academic_cycle IS NULL THEN 1
+                ELSE 2
+            END,
+            submitted_at DESC
         LIMIT 1
-    `, [applicationId]);
+    `, [applicationId, academicCycle]);
     return res.rows[0] || null;
 };
 
@@ -237,6 +288,7 @@ const createScholarshipAuditLog = async (client, data) => {
 };
 
 const getStudentApplicationByStudentAndCycle = async (studentId, _academicCycle = null) => {
+    const academicCycle = _academicCycle || null;
     const res = await pool.query(`
         SELECT sa.id, sa.student_id, sa.academic_cycle, sa.application_id, sa.application_id_extracted,
                sa.form_path, sa.form_original_name, sa.match_status, sa.submission_status,
@@ -245,8 +297,16 @@ const getStudentApplicationByStudentAndCycle = async (studentId, _academicCycle 
         FROM scholarship_applications sa
         JOIN students s ON s.id = sa.student_id
         WHERE sa.student_id = $1
+          AND ($2::text IS NULL OR sa.academic_cycle = $2 OR sa.academic_cycle IS NULL)
+        ORDER BY
+            CASE
+                WHEN sa.academic_cycle = $2 THEN 0
+                WHEN sa.academic_cycle IS NULL THEN 1
+                ELSE 2
+            END,
+            sa.submitted_at DESC
         LIMIT 1
-    `, [studentId]);
+    `, [studentId, academicCycle]);
     return res.rows[0] || null;
 };
 
@@ -265,23 +325,41 @@ const listApplicationsForAdmin = async () => {
 };
 
 const getPendingApplicationsByCycle = async (_academicCycle = null) => {
+    const academicCycle = _academicCycle || null;
     const res = await pool.query(`
         SELECT sa.*, s.full_name
         FROM scholarship_applications sa
         JOIN students s ON s.id = sa.student_id
         WHERE sa.submission_status = 'pending_verification'
-    `);
+          AND ($1::text IS NULL OR sa.academic_cycle = $1 OR sa.academic_cycle IS NULL)
+        ORDER BY
+            CASE
+                WHEN sa.academic_cycle = $1 THEN 0
+                WHEN sa.academic_cycle IS NULL THEN 1
+                ELSE 2
+            END,
+            sa.submitted_at DESC
+    `, [academicCycle]);
     return res.rows;
 };
 
 const getApplicationsByIdsAndCycle = async (applicationIds, _academicCycle = null) => {
     if (!applicationIds.length) return [];
+    const academicCycle = _academicCycle || null;
     const res = await pool.query(`
         SELECT sa.*, s.full_name
         FROM scholarship_applications sa
         JOIN students s ON s.id = sa.student_id
         WHERE sa.application_id = ANY($1::text[])
-    `, [applicationIds]);
+          AND ($2::text IS NULL OR sa.academic_cycle = $2 OR sa.academic_cycle IS NULL)
+        ORDER BY
+            CASE
+                WHEN sa.academic_cycle = $2 THEN 0
+                WHEN sa.academic_cycle IS NULL THEN 1
+                ELSE 2
+            END,
+            sa.submitted_at DESC
+    `, [applicationIds, academicCycle]);
     return res.rows;
 };
 
@@ -324,6 +402,8 @@ export default {
     markAsReversed,
     getStudentIdByUserId,
     getStudentForScholarship,
+    getStudentOutstandingSummary,
+    getOutstandingSummariesByStudentIds,
     getScholarshipConfigForStudent,
     findApplicationByStudentAndCycle,
     findApplicationByIdAndCycle,

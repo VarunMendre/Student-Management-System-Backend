@@ -170,6 +170,11 @@ const getStudentById = async (id) => {
 
     return {
         ...student,
+        total_course_fee: parseFloat(student.total_course_fee || 0),
+        total_paid: parseFloat(student.total_paid || 0),
+        total_pending: parseFloat(student.total_pending || 0),
+        scholarship_paid: parseFloat(student.scholarship_paid || 0),
+        regular_paid: parseFloat(student.regular_paid || 0),
         fee_ledger: parseCurrencyFields(ledger, ["total_yearly_fee", "total_paid", "pending_fee"]),
         recent_transactions: transactions.map((row) => ({
             ...row, amount_paid: parseFloat(row.amount_paid)

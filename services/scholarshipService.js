@@ -102,7 +102,7 @@ const submitScholarshipApplication = async ({ actorUserId, actorRole, manualAppl
     await ensureStudentEligibility(studentId);
     const academicCycle = getAcademicCycle();
 
-    const duplicateOwner = await scholarshipModel.findApplicationByIdAndCycle(normalizedManualId);
+    const duplicateOwner = await scholarshipModel.findApplicationByIdAndCycle(normalizedManualId, academicCycle);
     if (duplicateOwner && Number(duplicateOwner.student_id) !== Number(studentId)) {
         await deleteFileSafely(file.path);
         throw new CustomError({
@@ -177,7 +177,7 @@ const submitScholarshipApplication = async ({ actorUserId, actorRole, manualAppl
     }
 
     return await withTransaction(async (client) => {
-        const existing = await scholarshipModel.findApplicationByStudentAndCycle(studentId);
+        const existing = await scholarshipModel.findApplicationByStudentAndCycle(studentId, academicCycle);
         if (existing?.form_path && existing.form_path !== publicFormPath) {
             const oldPath = path.resolve(process.cwd(), existing.form_path.replace(/^\/uploads\//, "uploads/"));
             await deleteFileSafely(oldPath);
@@ -225,7 +225,7 @@ const getMyScholarshipApplication = async ({ actorUserId }) => {
             code: ErrorCodes.NOT_FOUND
         });
     }
-    return scholarshipModel.getStudentApplicationByStudentAndCycle(studentId);
+    return scholarshipModel.getStudentApplicationByStudentAndCycle(studentId, getAcademicCycle());
 };
 
 const listStudentApplications = async () => {
@@ -233,6 +233,7 @@ const listStudentApplications = async () => {
 };
 
 const reconcileGovSheetRows = async ({ actorUserId, actorRole, rows = [] }) => {
+    const academicCycle = getAcademicCycle();
     const normalizedGovRows = rows.map((row, idx) => ({
         row_index: idx,
         application_id: normalizeApplicationId(row.application_id || row.id || ""),
@@ -251,15 +252,30 @@ const reconcileGovSheetRows = async ({ actorUserId, actorRole, rows = [] }) => {
 
     const appIds = [...new Set(normalizedGovRows.map((row) => row.application_id))];
     const [pendingApps, matchedApps] = await Promise.all([
-        scholarshipModel.getPendingApplicationsByCycle(),
-        scholarshipModel.getApplicationsByIdsAndCycle(appIds)
+        scholarshipModel.getPendingApplicationsByCycle(academicCycle),
+        scholarshipModel.getApplicationsByIdsAndCycle(appIds, academicCycle)
     ]);
 
     const pendingMap = new Map(pendingApps.map((item) => [item.application_id, item]));
     const matchedMap = new Map(matchedApps.map((item) => [item.application_id, item]));
+    const outstandingSummaries = await scholarshipModel.getOutstandingSummariesByStudentIds(
+        [...new Set(matchedApps.map((item) => Number(item.student_id)).filter(Number.isInteger))]
+    );
+    const outstandingMap = new Map(
+        outstandingSummaries.map((item) => [
+            Number(item.student_id),
+            {
+                ...item,
+                total_course_fee: parseFloat(item.total_course_fee || 0),
+                total_paid: parseFloat(item.total_paid || 0),
+                total_pending: parseFloat(item.total_pending || 0)
+            }
+        ])
+    );
 
     const matched = [];
     const govNotInPortal = [];
+    const fullyPaidRecords = [];
 
     for (const row of normalizedGovRows) {
         if (duplicateIds.includes(row.application_id)) {
@@ -284,6 +300,19 @@ const reconcileGovSheetRows = async ({ actorUserId, actorRole, rows = [] }) => {
 
         const app = pendingMap.get(row.application_id);
         if (app) {
+            const outstanding = outstandingMap.get(Number(app.student_id));
+            if (outstanding && outstanding.total_pending <= 0) {
+                fullyPaidRecords.push({
+                    application_id: row.application_id,
+                    student_id: app.student_id,
+                    student_name: app.full_name,
+                    amount: row.amount,
+                    installment_no: row.installment_no,
+                    reason: "Student has already cleared all fees"
+                });
+                continue;
+            }
+
             matched.push({
                 application_id: row.application_id,
                 student_id: app.student_id,
@@ -301,12 +330,13 @@ const reconcileGovSheetRows = async ({ actorUserId, actorRole, rows = [] }) => {
     const portalNotInGov = pendingApps.filter((app) => !govIdSet.has(app.application_id));
 
     return {
-        academic_cycle: null,
+        academic_cycle: academicCycle,
         summary: {
             matched_count: matched.length,
             portal_not_in_gov_count: portalNotInGov.length,
             gov_not_in_portal_count: govNotInPortal.length,
-            conflicts_count: duplicateIds.length
+            conflicts_count: duplicateIds.length,
+            fully_paid_count: fullyPaidRecords.length
         },
         matched,
         portal_not_in_gov: portalNotInGov.map((app) => ({
@@ -316,7 +346,8 @@ const reconcileGovSheetRows = async ({ actorUserId, actorRole, rows = [] }) => {
             submitted_at: app.submitted_at
         })),
         gov_not_in_portal: govNotInPortal,
-        conflicts: duplicateIds
+        conflicts: duplicateIds,
+        fully_paid_records: fullyPaidRecords
     };
 };
 
@@ -355,6 +386,15 @@ const disburseScholarshipBatch = async (disbursements, actor = {}) => {
                     message: "Application is in conflict state and must be resolved first",
                     statusCode: 409,
                     code: ErrorCodes.CONFLICT
+                });
+            }
+
+            const outstandingSummary = await scholarshipModel.getStudentOutstandingSummary(student_id);
+            if (!outstandingSummary || parseFloat(outstandingSummary.total_pending || 0) <= 0) {
+                throw new CustomError({
+                    message: "Student has already cleared all fees",
+                    statusCode: 400,
+                    code: ErrorCodes.VALIDATION_ERROR
                 });
             }
 

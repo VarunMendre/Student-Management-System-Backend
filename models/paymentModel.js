@@ -40,6 +40,7 @@ const findTransactionsByStudent = async (studentId, yearNum) => {
         FROM fee_transactions ft
         JOIN student_fee_ledger sfl ON ft.ledger_id = sfl.id
         WHERE ft.student_id = $1
+          AND ft.status = 'Active'
     `;
     const values = [studentId];
     if (yearNum) {
@@ -95,30 +96,35 @@ const getStudentWithCourse = async (studentId) => {
 };
 
 const findAllTransactions = async (params = {}) => {
+    const normalizedDate = params.date || params.transaction_date || null;
+    const normalizedStartDate = params.startDate || params.fromDate || params.start_date || null;
+    const normalizedEndDate = params.endDate || params.toDate || params.end_date || null;
+    const normalizedPaymentMode = params.paymentMode || params.payment_mode || null;
+
     let query = `
         FROM fee_transactions ft
         JOIN students s ON ft.student_id = s.id
         JOIN courses c ON s.course_id = c.id
         JOIN course_batches cb ON s.batch_id = cb.id
         JOIN student_fee_ledger sfl ON ft.ledger_id = sfl.id
-        WHERE 1=1
+        WHERE ft.status = 'Active'
     `;
     const values = [];
     let i = 1;
 
-    if (params.date) {
+    if (normalizedDate) {
         query += ` AND ft.transaction_date = $${i++}`;
-        values.push(params.date);
+        values.push(normalizedDate);
     }
 
-    if (params.startDate && params.endDate) {
+    if (normalizedStartDate && normalizedEndDate) {
         query += ` AND ft.transaction_date BETWEEN $${i++} AND $${i++}`;
-        values.push(params.startDate, params.endDate);
+        values.push(normalizedStartDate, normalizedEndDate);
     }
 
-    if (params.paymentMode) {
+    if (normalizedPaymentMode) {
         query += ` AND ft.payment_mode = $${i++}`;
-        values.push(params.paymentMode);
+        values.push(normalizedPaymentMode);
     }
 
     // Count query
@@ -137,11 +143,11 @@ const findAllTransactions = async (params = {}) => {
         ORDER BY ft.created_at DESC
     `;
 
-    if (params.limit) {
+    if (params.limit !== undefined) {
         dataQuery += ` LIMIT $${i++}`;
         values.push(parseInt(params.limit));
     }
-    if (params.offset) {
+    if (params.offset !== undefined) {
         dataQuery += ` OFFSET $${i++}`;
         values.push(parseInt(params.offset));
     }
