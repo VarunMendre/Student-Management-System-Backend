@@ -218,6 +218,46 @@ const syncStudentProfile = async (studentId, { full_name, email, mobile_number }
     return rows[0] || null;
 };
 
+const getFeeLedgerReport = async (filters = {}) => {
+    const baseQuery = `
+        SELECT 
+            s.id, s.full_name, s.email, s.prn_number,
+            d.name as department_name, c.course_name, c.duration, cb.batch_name,
+            COALESCE(ledger.total_course_fee, 0) as total_course_fee,
+            COALESCE(ledger.total_paid, 0) as total_paid,
+            COALESCE(ledger.total_pending, 0) as total_pending,
+            COALESCE(ledger.fee_ledger, '[]'::jsonb) as fee_ledger
+        FROM students s
+        JOIN departments d ON s.department_id = d.id
+        JOIN courses c ON s.course_id = c.id
+        JOIN course_batches cb ON s.batch_id = cb.id
+        LEFT JOIN LATERAL (
+            SELECT
+                SUM(sfl.total_yearly_fee) as total_course_fee,
+                SUM(sfl.total_paid) as total_paid,
+                SUM(sfl.pending_fee) as total_pending,
+                jsonb_agg(
+                    jsonb_build_object(
+                        'year_num', sfl.academic_year_num,
+                        'year_label', sfl.academic_year,
+                        'pending', sfl.pending_fee,
+                        'paid', sfl.total_paid,
+                        'total', sfl.total_yearly_fee
+                    )
+                    ORDER BY sfl.academic_year_num ASC
+                ) as fee_ledger
+            FROM student_fee_ledger sfl
+            WHERE sfl.student_id = s.id
+        ) ledger ON TRUE
+    `;
+
+    const { whereClause, values } = buildStudentFilterParts(filters);
+    const query = `${baseQuery}${whereClause} ORDER BY s.full_name ASC`;
+    
+    const { rows } = await pool.query(query, values);
+    return rows;
+};
+
 const findStudents = async (filters = {}, pagination = {}) => {
     const baseQuery = `
         SELECT 
@@ -363,6 +403,7 @@ export default {
     exists,
     update,
     syncStudentProfile,
+    getFeeLedgerReport,
     findStudents,
     countStudents,
     updateStudentById,

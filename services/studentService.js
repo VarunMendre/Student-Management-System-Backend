@@ -313,4 +313,24 @@ const bulkImportStudents = async (data) => {
     });
 };
 
-export default { enrollStudent, getStudentMetadata, listStudents, getStudentById, updateStudent, bulkImportStudents };
+const getFeeLedgerReport = async (filters = {}) => {
+    const rows = await studentModel.getFeeLedgerReport(filters);
+
+    return rows.map((row) => ({
+        ...row,
+        total_course_fee: parseFloat(row.total_course_fee),
+        total_paid: parseFloat(row.total_paid),
+        total_pending: parseFloat(row.total_pending),
+        fee_ledger: parseLedgerFields(Array.isArray(row.fee_ledger) ? row.fee_ledger : [])
+    }));
+};
+
+export default { 
+    enrollStudent, 
+    getStudentMetadata, 
+    listStudents, 
+    getStudentById, 
+    updateStudent, 
+    bulkImportStudents,
+    getFeeLedgerReport
+};

@@ -41,4 +41,22 @@ export const bulkImportStudents = asyncHandler(async (req, res) => {
     successResponse(res, result, "Students imported successfully", 201);
 });
 
-export default { enrollStudent, getStudentMetadata, listStudents, getStudent, updateStudent, bulkImportStudents };
+export const getFeeLedgerReport = asyncHandler(async (req, res) => {
+    const { department_id, course_id, batch_id } = req.query;
+    const result = await studentService.getFeeLedgerReport({
+        department_id,
+        course_id,
+        batch_id
+    });
+    successResponse(res, result, "Fee ledger report fetched successfully");
+});
+
+export default { 
+    enrollStudent, 
+    getStudentMetadata, 
+    listStudents, 
+    getStudent, 
+    updateStudent, 
+    bulkImportStudents,
+    getFeeLedgerReport 
+};
