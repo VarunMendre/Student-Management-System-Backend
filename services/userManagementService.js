@@ -122,6 +122,13 @@ const forceLogout = async (userId) => {
     return userModel.updateRefreshToken(parsedUserId, null);
 };
 
+const checkEmailDuplicate = async (email, currentUserId) => {
+    const existingUser = currentUserId 
+        ? await userModel.findByEmailExcludingId(email, currentUserId)
+        : await userModel.findByEmail(email);
+    return !!existingUser;
+};
+
 export default {
     getAllUsers,
     createUser,
@@ -129,5 +136,6 @@ export default {
     deactivateUser,
     recoverUser,
     deleteUser,
-    forceLogout
+    forceLogout,
+    checkEmailDuplicate
 };

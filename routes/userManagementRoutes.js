@@ -6,12 +6,14 @@ import {
     forceLogout,
     getAllUsers,
     recoverUser,
-    updateUserRole
+    updateUserRole,
+    checkEmailExists
 } from "../controllers/userManagementController.js";
 import { authorizeRoles } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
+router.get("/check-email", checkEmailExists);
 router.get("/", authorizeRoles("principal"), getAllUsers);
 router.post("/", authorizeRoles("principal"), createUser);
 router.patch("/:id/role", authorizeRoles("principal"), updateUserRole);

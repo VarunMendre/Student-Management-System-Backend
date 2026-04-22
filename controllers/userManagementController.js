@@ -41,3 +41,10 @@ export const forceLogout = asyncHandler(async (req, res) => {
 
     successResponse(res, { user: updatedUser }, "User session cleared successfully");
 });
+
+export const checkEmailExists = asyncHandler(async (req, res) => {
+    const { email } = req.query;
+    const userId = req.user?.userId;
+    const exists = await userManagementService.checkEmailDuplicate(email, userId);
+    res.json({ exists });
+});
