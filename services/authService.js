@@ -1,5 +1,6 @@
 import bcrypt from "bcryptjs";
 import userModel from "../models/userModel.js";
+import studentModel from "../models/studentModel.js";
 import { generateToken, verifyToken } from "../utils/jwtHelper.js";
 import { CustomError, ErrorCodes } from "../utils/customError.js";
 import { normalizeEmail } from "../utils/studentOptions.js";
@@ -223,6 +224,21 @@ const updateCurrentUser = async (userId, { name, email, contact_number }) => {
         email: trimmedEmail,
         contact_number: trimmedContactNumber
     });
+
+    // If user is a student, sync with academic students table
+    if (updatedUser.student_id) {
+        try {
+            await studentModel.syncStudentProfile(updatedUser.student_id, {
+                full_name: trimmedName,
+                email: trimmedEmail,
+                mobile_number: trimmedContactNumber
+            });
+        } catch (syncError) {
+            console.error(`Failed to sync student ${updatedUser.student_id}:`, syncError);
+            // We don't throw here to avoid failing the user profile update itself,
+            // but in a production app we might want more robust sync or queueing.
+        }
+    }
 
     return sanitizeUser(updatedUser);
 };

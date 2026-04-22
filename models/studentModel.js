@@ -207,6 +207,17 @@ const update = async (query, values) => {
     return rows[0];
 };
 
+const syncStudentProfile = async (studentId, { full_name, email, mobile_number }) => {
+    const { rows } = await pool.query(
+        `UPDATE students 
+         SET full_name = $2, email = $3, mobile_number = $4, updated_at = CURRENT_TIMESTAMP
+         WHERE id = $1
+         RETURNING id, full_name, email, mobile_number`,
+        [studentId, full_name, email, mobile_number]
+    );
+    return rows[0] || null;
+};
+
 const findStudents = async (filters = {}, pagination = {}) => {
     const baseQuery = `
         SELECT 
@@ -351,6 +362,7 @@ export default {
     getRecentTransactionsByStudent,
     exists,
     update,
+    syncStudentProfile,
     findStudents,
     countStudents,
     updateStudentById,
