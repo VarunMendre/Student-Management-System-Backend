@@ -2,36 +2,39 @@ import { pool } from "../config/db.js";
 
 const create = async (data) => {
     const { course_id, batch_name, admission_year, total_seats } = data;
-    const { rows } = await pool.query(
-        "INSERT INTO course_batches (course_id, batch_name, admission_year, total_seats) VALUES ($1, $2, $3, $4) RETURNING *",
+    const [result] = await pool.query(
+        "INSERT INTO course_batches (course_id, batch_name, admission_year, total_seats) VALUES (?, ?, ?, ?)",
         [course_id, batch_name, admission_year, total_seats]
     );
+    const [rows] = await pool.query("SELECT * FROM course_batches WHERE id = ?", [result.insertId]);
     return rows[0];
 };
 
-const deleteFeesByBatch = async (client, batchId) => {
-    await client.query("DELETE FROM course_fees WHERE batch_id = $1", [batchId]);
+const deleteFeesByBatch = async (connection, batchId) => {
+    await connection.query("DELETE FROM course_fees WHERE batch_id = ?", [batchId]);
 };
 
-const insertFee = async (client, batchId, component_name, amount) => {
-    await client.query(
-        "INSERT INTO course_fees (batch_id, component_name, amount) VALUES ($1, $2, $3)",
+const insertFee = async (connection, batchId, component_name, amount) => {
+    await connection.query(
+        "INSERT INTO course_fees (batch_id, component_name, amount) VALUES (?, ?, ?)",
         [batchId, component_name, amount]
     );
 };
 
 const findBatchById = async (batchId) => {
-    const { rows } = await pool.query("SELECT * FROM course_batches WHERE id = $1", [batchId]);
+    const [rows] = await pool.query("SELECT * FROM course_batches WHERE id = ?", [batchId]);
     return rows[0];
 };
 
 const findFeesByBatchWithTotal = async (batchId) => {
-    const res = await pool.query(
+    // MySQL 8.0 support window functions. 
+    // Note: phpMyAdmin/MySQL might be older or in a mode where OVER() needs special handling, but usually it's fine.
+    const [rows] = await pool.query(
         `SELECT id, component_name, amount, SUM(amount) OVER() as total_fee 
-         FROM course_fees WHERE batch_id = $1`,
+         FROM course_fees WHERE batch_id = ?`,
         [batchId]
     );
-    return res.rows;
+    return rows;
 };
 
 const findAllWithCourseDetails = async (courseId = null) => {
@@ -46,13 +49,13 @@ const findAllWithCourseDetails = async (courseId = null) => {
     `;
 
     if (courseId) {
-        query += " WHERE cb.course_id = $1";
+        query += " WHERE cb.course_id = ?";
         values.push(courseId);
     }
 
     query += " GROUP BY cb.id, c.course_name, d.name ORDER BY cb.admission_year DESC";
 
-    const { rows } = await pool.query(query, values);
+    const [rows] = await pool.query(query, values);
     return rows;
 };
 

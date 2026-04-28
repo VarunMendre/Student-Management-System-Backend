@@ -11,8 +11,8 @@ export const generateReceiptNumber = async () => {
     const prefix = `RCP-${dateStr}-`;
 
     // Count existing receipts for today to determine next sequence
-    const { rows } = await pool.query(
-        "SELECT COUNT(*) as count FROM fee_transactions WHERE receipt_number LIKE $1",
+    const [rows] = await pool.query(
+        "SELECT COUNT(*) as count FROM fee_transactions WHERE receipt_number LIKE ?",
         [`${prefix}%`]
     );
 

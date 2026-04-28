@@ -1,37 +1,40 @@
 import { pool } from "../config/db.js";
 
 const findAll = async () => {
-    const { rows } = await pool.query("SELECT * FROM departments ORDER BY created_at DESC");
+    const [rows] = await pool.query("SELECT * FROM departments ORDER BY created_at DESC");
     return rows;
 };
 
 const findById = async (id) => {
-    const { rows } = await pool.query("SELECT * FROM departments WHERE id = $1", [id]);
+    const [rows] = await pool.query("SELECT * FROM departments WHERE id = ?", [id]);
     return rows[0];
 };
 
 const create = async (name) => {
-    const { rows } = await pool.query(
-        "INSERT INTO departments (name) VALUES ($1) RETURNING *",
+    const [result] = await pool.query(
+        "INSERT INTO departments (name) VALUES (?)",
         [name]
     );
+    const [rows] = await pool.query("SELECT * FROM departments WHERE id = ?", [result.insertId]);
     return rows[0];
 };
 
 const update = async (id, name) => {
-    const { rows } = await pool.query(
-        "UPDATE departments SET name = $1 WHERE id = $2 RETURNING *",
+    await pool.query(
+        "UPDATE departments SET name = ? WHERE id = ?",
         [name, id]
     );
+    const [rows] = await pool.query("SELECT * FROM departments WHERE id = ?", [id]);
     return rows[0];
 };
 
 const remove = async (id) => {
-    const { rows } = await pool.query(
-        "DELETE FROM departments WHERE id = $1 RETURNING *",
-        [id]
-    );
-    return rows[0];
+    const [rows] = await pool.query("SELECT * FROM departments WHERE id = ?", [id]);
+    const dept = rows[0];
+    if (dept) {
+        await pool.query("DELETE FROM departments WHERE id = ?", [id]);
+    }
+    return dept;
 };
 
 export default {

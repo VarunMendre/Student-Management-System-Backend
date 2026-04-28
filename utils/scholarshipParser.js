@@ -46,9 +46,9 @@ export const extractApplicationIdFromPdfText = (text = "") => {
     const compactText = normalizedText.replace(/\s+/g, "");
 
     const labelPatterns = [
-        /application\s*(?:id|no|number)\s*[:\-]?\s*([A-Z0-9\- ]{6,30})/i,
-        /app(?:lication)?\s*(?:id|no|number)\s*[:\-]?\s*([A-Z0-9\- ]{6,30})/i,
-        /applicationid[:\-]?([A-Z0-9]{6,30})/i
+        /application\s*(?:id|no|number)\s*[:\-]?\s*([A-Z]{2,}[0-9]{4,10})/i,
+        /app(?:lication)?\s*(?:id|no|number)\s*[:\-]?\s*([A-Z]{2,}[0-9]{4,10})/i,
+        /applicationid[:\-]?([A-Z]{2,}[0-9]{4,10})/i
     ];
 
     for (const pattern of labelPatterns) {
@@ -70,8 +70,12 @@ export const extractApplicationIdFromPdfText = (text = "") => {
 };
 
 export const textContainsApplicationId = (text = "", applicationId = "") => {
-    const normalizedText = normalizeApplicationId(normalizeOcrText(text));
-    const variants = buildOcrFriendlyVariants(applicationId);
+    if (!text || !applicationId) return false;
+    
+    const normalizedText = normalizeOcrText(text).replace(/\s+/g, "");
+    const targetId = normalizeApplicationId(applicationId);
+    
+    const variants = buildOcrFriendlyVariants(targetId);
     return variants.some((variant) => variant && normalizedText.includes(variant));
 };
 
@@ -104,11 +108,10 @@ export const getCategoryCandidates = (category = "") => {
         set.add("EWS");
     }
 
-    if (normalized.includes("OPEN") || normalized.includes("GENERAL")) {
-        set.add("OPEN");
-        set.add("Open");
+    if (normalized.includes("OPEN") || normalized.includes("GENERAL") || normalized.includes("EBC")) {
         set.add("General");
-        set.add("General / Open");
+        set.add("Open");
+        set.add("OPEN");
     }
 
     return [...set];

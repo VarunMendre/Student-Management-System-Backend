@@ -2,23 +2,23 @@ import { pool } from "../config/db.js";
 
 /**
  * Executes a function within a database transaction.
- * Automatically handles BEGIN, COMMIT, ROLLBACK, and Client Release.
+ * Automatically handles transaction start, commit, rollback, and connection release.
  * 
- * @param {Function} work - Async function receiving 'client'
+ * @param {Function} work - Async function receiving 'connection'
  * @returns {Promise<any>} - Result of the work
  */
 export const withTransaction = async (work) => {
-    const client = await pool.connect();
+    const connection = await pool.getConnection();
     try {
-        await client.query("BEGIN");
-        const result = await work(client);
-        await client.query("COMMIT");
+        await connection.beginTransaction();
+        const result = await work(connection);
+        await connection.commit();
         return result;
     } catch (error) {
-        await client.query("ROLLBACK");
+        await connection.rollback();
         throw error;
     } finally {
-        client.release();
+        connection.release();
     }
 };
 
@@ -27,16 +27,16 @@ export const withTransaction = async (work) => {
  * but still need a transaction for each item.
  */
 export const withTransactionSilent = async (work) => {
-    const client = await pool.connect();
+    const connection = await pool.getConnection();
     try {
-        await client.query("BEGIN");
-        const result = await work(client);
-        await client.query("COMMIT");
+        await connection.beginTransaction();
+        const result = await work(connection);
+        await connection.commit();
         return { success: true, result };
     } catch (error) {
-        await client.query("ROLLBACK");
+        await connection.rollback();
         return { success: false, error };
     } finally {
-        client.release();
+        connection.release();
     }
 };

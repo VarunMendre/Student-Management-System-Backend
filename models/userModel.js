@@ -15,78 +15,81 @@ const DEFAULT_USER_COLUMNS = `
 `;
 
 const findByEmail = async (email) => {
-    const { rows } = await pool.query(
+    const [rows] = await pool.query(
         `SELECT ${DEFAULT_USER_COLUMNS}, password
          FROM app_users
-         WHERE email = $1`,
+         WHERE email = ?`,
         [email]
     );
     return rows[0] || null;
 };
 
 const findByEmailExcludingId = async (email, id) => {
-    const { rows } = await pool.query(
+    const [rows] = await pool.query(
         `SELECT ${DEFAULT_USER_COLUMNS}
          FROM app_users
-         WHERE email = $1 AND id <> $2`,
+         WHERE email = ? AND id <> ?`,
         [email, id]
     );
     return rows[0] || null;
 };
 
 const findById = async (id) => {
-    const { rows } = await pool.query(
+    const [rows] = await pool.query(
         `SELECT ${DEFAULT_USER_COLUMNS}
          FROM app_users
-         WHERE id = $1`,
+         WHERE id = ?`,
         [id]
     );
     return rows[0] || null;
 };
 
 const findByIdWithPassword = async (id) => {
-    const { rows } = await pool.query(
+    const [rows] = await pool.query(
         `SELECT ${DEFAULT_USER_COLUMNS}, password
          FROM app_users
-         WHERE id = $1`,
+         WHERE id = ?`,
         [id]
     );
     return rows[0] || null;
 };
 
 const updateRefreshToken = async (userId, token) => {
-    const { rows } = await pool.query(
+    await pool.query(
         `UPDATE app_users
-         SET refresh_token = $2, updated_at = CURRENT_TIMESTAMP
-         WHERE id = $1
-         RETURNING ${DEFAULT_USER_COLUMNS}`,
-        [userId, token]
+         SET refresh_token = ?, updated_at = CURRENT_TIMESTAMP
+         WHERE id = ?`,
+        [token, userId]
     );
-    return rows[0] || null;
+    return findById(userId);
 };
 
 const createUser = async ({ name, email, password, contact_number, role }) => {
-    const { rows } = await pool.query(
+    const [result] = await pool.query(
         `INSERT INTO app_users (name, email, password, contact_number, role, is_password_changed)
-         VALUES ($1, $2, $3, $4, $5, FALSE)
-         RETURNING ${DEFAULT_USER_COLUMNS}`,
+         VALUES (?, ?, ?, ?, ?, FALSE)`,
         [name, email, password, contact_number, role]
     );
-    return rows[0];
+    return findById(result.insertId);
 };
 
-const createStudentUser = async (client, { name, email, password, contact_number, role, student_id, is_password_changed = false }) => {
-    const { rows } = await client.query(
+const createStudentUser = async (connection, { name, email, password, contact_number, role, student_id, is_password_changed = false }) => {
+    // Note: mysql2/promise connection uses query the same way as pool
+    const [result] = await connection.query(
         `INSERT INTO app_users (name, email, password, contact_number, role, student_id, is_password_changed)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
-         RETURNING ${DEFAULT_USER_COLUMNS}`,
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
         [name, email, password, contact_number, role, student_id, is_password_changed]
+    );
+    
+    const [rows] = await connection.query(
+        `SELECT ${DEFAULT_USER_COLUMNS} FROM app_users WHERE id = ?`,
+        [result.insertId]
     );
     return rows[0];
 };
 
 const getAllStaffUsers = async () => {
-    const { rows } = await pool.query(
+    const [rows] = await pool.query(
         `SELECT id, name, email, contact_number, role, is_active, is_password_changed,
                 (refresh_token IS NOT NULL) AS is_online, created_at, updated_at
          FROM app_users
@@ -97,97 +100,113 @@ const getAllStaffUsers = async () => {
 };
 
 const updateRole = async (id, role) => {
-    const { rows } = await pool.query(
+    await pool.query(
         `UPDATE app_users
-         SET role = $2, updated_at = CURRENT_TIMESTAMP
-         WHERE id = $1
-         RETURNING id, name, email, contact_number, role, is_active, is_password_changed,
-                   (refresh_token IS NOT NULL) AS is_online, created_at, updated_at`,
-        [id, role]
+         SET role = ?, updated_at = CURRENT_TIMESTAMP
+         WHERE id = ?`,
+        [role, id]
     );
-    return rows[0] || null;
-};
-
-const setActiveStatus = async (id, status) => {
-    const { rows } = await pool.query(
-        `UPDATE app_users
-         SET is_active = $2,
-             refresh_token = CASE WHEN $2 THEN refresh_token ELSE NULL END,
-             updated_at = CURRENT_TIMESTAMP
-         WHERE id = $1
-         RETURNING id, name, email, contact_number, role, is_active, is_password_changed,
-                   (refresh_token IS NOT NULL) AS is_online, created_at, updated_at`,
-        [id, status]
-    );
-    return rows[0] || null;
-};
-
-const deleteById = async (id) => {
-    const { rows } = await pool.query(
-        `DELETE FROM app_users
-         WHERE id = $1
-         RETURNING id, name, email, role`,
+    
+    const [rows] = await pool.query(
+        `SELECT id, name, email, contact_number, role, is_active, is_password_changed,
+                (refresh_token IS NOT NULL) AS is_online, created_at, updated_at
+         FROM app_users
+         WHERE id = ?`,
         [id]
     );
     return rows[0] || null;
 };
 
-const updatePassword = async (id, hashedPassword) => {
-    const { rows } = await pool.query(
+const setActiveStatus = async (id, status) => {
+    await pool.query(
         `UPDATE app_users
-         SET password = $2,
-             is_password_changed = TRUE,
+         SET is_active = ?,
+             refresh_token = CASE WHEN ? THEN refresh_token ELSE NULL END,
              updated_at = CURRENT_TIMESTAMP
-         WHERE id = $1
-         RETURNING ${DEFAULT_USER_COLUMNS}`,
-        [id, hashedPassword]
+         WHERE id = ?`,
+        [status, status, id]
+    );
+    
+    const [rows] = await pool.query(
+        `SELECT id, name, email, contact_number, role, is_active, is_password_changed,
+                (refresh_token IS NOT NULL) AS is_online, created_at, updated_at
+         FROM app_users
+         WHERE id = ?`,
+        [id]
     );
     return rows[0] || null;
 };
 
-const updateProfile = async (id, { name, email, contact_number }) => {
-    const { rows } = await pool.query(
-        `UPDATE app_users
-         SET name = $2,
-             email = $3,
-             contact_number = $4,
-             updated_at = CURRENT_TIMESTAMP
-         WHERE id = $1
-         RETURNING ${DEFAULT_USER_COLUMNS}`,
-        [id, name, email, contact_number]
+const deleteById = async (id) => {
+    // MySQL delete doesn't return columns, so we fetch then delete
+    const [rows] = await pool.query(
+        `SELECT id, name, email, role FROM app_users WHERE id = ?`,
+        [id]
     );
-    return rows[0] || null;
+    const user = rows[0] || null;
+    if (user) {
+        await pool.query(`DELETE FROM app_users WHERE id = ?`, [id]);
+    }
+    return user;
+};
+
+const updatePassword = async (id, hashedPassword) => {
+    await pool.query(
+        `UPDATE app_users
+         SET password = ?,
+             is_password_changed = TRUE,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE id = ?`,
+        [hashedPassword, id]
+    );
+    return findById(id);
+};
+
+const updateProfile = async (id, { name, email, contact_number }) => {
+    await pool.query(
+        `UPDATE app_users
+         SET name = ?,
+             email = ?,
+             contact_number = ?,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE id = ?`,
+        [name, email, contact_number, id]
+    );
+    return findById(id);
 };
 
 const updateStudentPasswordChangedStatus = async (studentId, status = true) => {
     if (!studentId) return null;
 
-    const { rows } = await pool.query(
+    await pool.query(
         `UPDATE students
-         SET is_password_changed = $2,
+         SET is_password_changed = ?,
              updated_at = CURRENT_TIMESTAMP
-         WHERE id = $1
-         RETURNING id, is_password_changed`,
-        [studentId, status]
+         WHERE id = ?`,
+        [status, studentId]
+    );
+    
+    const [rows] = await pool.query(
+        `SELECT id, is_password_changed FROM students WHERE id = ?`,
+        [studentId]
     );
     return rows[0] || null;
 };
 
-const updateStudentLinkedAccount = async (client, studentId, { name, email, contact_number }) => {
+const updateStudentLinkedAccount = async (connection, studentId, { name, email, contact_number }) => {
     const updates = [];
     const values = [];
-    let index = 1;
 
     if (name !== undefined) {
-        updates.push(`name = $${index++}`);
+        updates.push(`name = ?`);
         values.push(name);
     }
     if (email !== undefined) {
-        updates.push(`email = $${index++}`);
+        updates.push(`email = ?`);
         values.push(email);
     }
     if (contact_number !== undefined) {
-        updates.push(`contact_number = $${index++}`);
+        updates.push(`contact_number = ?`);
         values.push(contact_number);
     }
 
@@ -196,14 +215,19 @@ const updateStudentLinkedAccount = async (client, studentId, { name, email, cont
     }
 
     updates.push(`updated_at = CURRENT_TIMESTAMP`);
+    // studentId for the WHERE clause
     values.push(studentId);
 
-    const { rows } = await client.query(
+    await connection.query(
         `UPDATE app_users
          SET ${updates.join(", ")}
-         WHERE student_id = $${index}
-         RETURNING ${DEFAULT_USER_COLUMNS}`,
+         WHERE student_id = ?`,
         values
+    );
+    
+    const [rows] = await connection.query(
+        `SELECT ${DEFAULT_USER_COLUMNS} FROM app_users WHERE student_id = ?`,
+        [studentId]
     );
     return rows[0] || null;
 };

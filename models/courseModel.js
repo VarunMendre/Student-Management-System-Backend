@@ -1,12 +1,13 @@
 import { pool } from "../config/db.js";
 
 const findAll = async () => {
-    const { rows } = await pool.query(`
+    const [rows] = await pool.query(`
         SELECT c.*, d.name as department_name,
-               coalesce(
-                 (SELECT jsonb_object_agg(sub.cat_id, sub.details)
+               COALESCE(
+                 (SELECT JSON_OBJECTAGG(cat_id, details)
                   FROM (
                     SELECT 
+                      course_id,
                       CASE 
                         WHEN caste_category = 'SC / ST' THEN 'scst'
                         WHEN caste_category = 'VJ / DT / NT / SBC' THEN 'vjnt'
@@ -15,16 +16,17 @@ const findAll = async () => {
                         WHEN caste_category = 'OPEN' THEN 'open'
                         ELSE lower(caste_category)
                       END as cat_id,
-                      jsonb_build_object(
+                      JSON_OBJECT(
                         'maleGov', MAX(CASE WHEN gender = 'Male' THEN max_amount END),
                         'femaleGov', MAX(CASE WHEN gender = 'Female' THEN max_amount END)
                       ) as details
                     FROM course_scholarship_config 
-                    WHERE course_id = c.id AND is_active = TRUE
-                    GROUP BY 1
+                    WHERE is_active = TRUE
+                    GROUP BY course_id, caste_category
                   ) sub
-                 ), '{}'::jsonb
-               ) as "scholarshipStructure"
+                  WHERE sub.course_id = c.id
+                 ), JSON_OBJECT()
+               ) as scholarshipStructure
         FROM courses c 
         LEFT JOIN departments d ON c.department_id = d.id 
         ORDER BY c.created_at DESC
@@ -33,12 +35,13 @@ const findAll = async () => {
 };
 
 const findById = async (id) => {
-    const { rows } = await pool.query(`
+    const [rows] = await pool.query(`
         SELECT c.*, d.name as department_name,
-               coalesce(
-                 (SELECT jsonb_object_agg(sub.cat_id, sub.details)
+               COALESCE(
+                 (SELECT JSON_OBJECTAGG(cat_id, details)
                   FROM (
                     SELECT 
+                      course_id,
                       CASE 
                         WHEN caste_category = 'SC / ST' THEN 'scst'
                         WHEN caste_category = 'VJ / DT / NT / SBC' THEN 'vjnt'
@@ -47,53 +50,55 @@ const findById = async (id) => {
                         WHEN caste_category = 'OPEN' THEN 'open'
                         ELSE lower(caste_category)
                       END as cat_id,
-                      jsonb_build_object(
+                      JSON_OBJECT(
                         'maleGov', MAX(CASE WHEN gender = 'Male' THEN max_amount END),
                         'femaleGov', MAX(CASE WHEN gender = 'Female' THEN max_amount END)
                       ) as details
                     FROM course_scholarship_config 
-                    WHERE course_id = c.id AND is_active = TRUE
-                    GROUP BY 1
+                    WHERE is_active = TRUE
+                    GROUP BY course_id, caste_category
                   ) sub
-                 ), '{}'::jsonb
-               ) as "scholarshipStructure"
+                  WHERE sub.course_id = c.id
+                 ), JSON_OBJECT()
+               ) as scholarshipStructure
         FROM courses c 
         LEFT JOIN departments d ON c.department_id = d.id 
-        WHERE c.id = $1
+        WHERE c.id = ?
     `, [id]);
     return rows[0];
 };
 
 const create = async (data) => {
     const { course_name, duration, department_id, course_code, program_level } = data;
-    const { rows } = await pool.query(
+    const [result] = await pool.query(
         `INSERT INTO courses 
         (course_name, duration, department_id, course_code, program_level) 
-        VALUES ($1, $2, $3, $4, $5) 
-        RETURNING *`,
+        VALUES (?, ?, ?, ?, ?)`,
         [course_name, duration, department_id, course_code, program_level]
     );
+    const [rows] = await pool.query("SELECT * FROM courses WHERE id = ?", [result.insertId]);
     return rows[0];
 };
 
 const update = async (id, data) => {
     const { course_name, duration, department_id, course_code, program_level } = data;
-    const { rows } = await pool.query(
+    await pool.query(
         `UPDATE courses 
-        SET course_name = $1, duration = $2, department_id = $3, course_code = $4, program_level = $5 
-        WHERE id = $6 
-        RETURNING *`,
+        SET course_name = ?, duration = ?, department_id = ?, course_code = ?, program_level = ? 
+        WHERE id = ?`,
         [course_name, duration, department_id, course_code, program_level, id]
     );
+    const [rows] = await pool.query("SELECT * FROM courses WHERE id = ?", [id]);
     return rows[0];
 };
 
 const remove = async (id) => {
-    const { rows } = await pool.query(
-        "DELETE FROM courses WHERE id = $1 RETURNING *",
-        [id]
-    );
-    return rows[0];
+    const [rows] = await pool.query("SELECT * FROM courses WHERE id = ?", [id]);
+    const course = rows[0];
+    if (course) {
+        await pool.query("DELETE FROM courses WHERE id = ?", [id]);
+    }
+    return course;
 };
 
 export default {

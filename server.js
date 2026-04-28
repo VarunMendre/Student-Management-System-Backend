@@ -15,7 +15,7 @@ import { CustomError, ErrorCodes } from "./utils/customError.js";
 
 const app = express();
 app.use(cors({
-    origin: 'http://localhost:5173',             
+    origin: 'http://localhost:5173' || '',
     credentials: true,                           
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization']
@@ -32,7 +32,7 @@ app.use((req, res, next) => {
 });
 
 app.get("/", (req, res) => {
-    res.send("PostgreSQL + Express API is running Hello World!");
+    res.send("MySQL + Express API is running Hello World!");
 });
 
 app.use("/api/v1/auth", authRoutes);

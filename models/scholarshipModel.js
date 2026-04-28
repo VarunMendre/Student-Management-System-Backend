@@ -2,102 +2,111 @@ import { pool } from "../config/db.js";
 import { getCategoryCandidates } from "../utils/scholarshipParser.js";
 
 /**
- * Scholarship Data Access Layer
+ * Scholarship Data Access Layer (MySQL Refactored)
  */
 
 const getConfigByCourse = async (courseId) => {
-    const { rows } = await pool.query(
-        "SELECT * FROM course_scholarship_config WHERE course_id = $1 AND is_active = TRUE",
+    const [rows] = await pool.query(
+        "SELECT * FROM course_scholarship_config WHERE course_id = ? AND is_active = TRUE",
         [courseId]
     );
     return rows;
 };
 
-const upsertConfig = async (client, courseId, caste, gender, amount) => {
-    // Normalize inputs to prevent duplicates due to casing/spacing
-    const normalizedCaste = String(caste || "").trim();
+const upsertConfig = async (connection, courseId, caste, gender, amount) => {
+    let normalizedCaste = String(caste || "").trim();
     const normalizedGender = String(gender || "").trim();
     
-    await client.query(`
+    // Standardize all Open/General variants to 'General'
+    const up = normalizedCaste.toUpperCase();
+    if (up.includes('OPEN') || up.includes('GENERAL') || up.includes('EBC')) {
+        normalizedCaste = 'General';
+    }
+    
+    await connection.query(`
         INSERT INTO course_scholarship_config (course_id, caste_category, gender, max_amount)
-        VALUES ($1, $2, $3, $4)
-        ON CONFLICT (course_id, caste_category, gender) 
-        DO UPDATE SET max_amount = EXCLUDED.max_amount, is_active = TRUE
+        VALUES (?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE max_amount = VALUES(max_amount), is_active = TRUE
     `, [courseId, normalizedCaste, normalizedGender, amount]);
 };
 
-const getStudentAndLedgerForUpdate = async (client, studentId, yearNum) => {
-    const res = await client.query(`
+const getStudentAndLedgerForUpdate = async (connection, studentId, yearNum) => {
+    const [rows] = await connection.query(`
         SELECT s.id, s.course_id, s.caste_category, s.gender, s.full_name,
                sfl.id as ledger_id, sfl.pending_fee, sfl.total_paid, sfl.total_yearly_fee
         FROM students s
         JOIN student_fee_ledger sfl ON s.id = sfl.student_id
-        WHERE s.id = $1 AND sfl.academic_year_num = $2
-        FOR UPDATE OF sfl
+        WHERE s.id = ? AND sfl.academic_year_num = ?
+        FOR UPDATE
     `, [studentId, yearNum]);
-    return res.rows[0];
+    return rows[0];
 };
 
-const checkDuplicateDisbursal = async (client, studentId, appId, instNo) => {
-    const res = await client.query(`
+const checkDuplicateDisbursal = async (connection, studentId, appId, instNo) => {
+    const [rows] = await connection.query(`
         SELECT id FROM fee_transactions 
-        WHERE student_id = $1 AND application_id = $2 AND installment_no = $3 
+        WHERE student_id = ? AND application_id = ? AND installment_no = ? 
         AND payment_mode = 'Scholarship' AND status = 'Active'
     `, [studentId, appId, instNo]);
-    return res.rows.length > 0;
+    return rows.length > 0;
 };
 
-const getScholarshipConfig = async (client, courseId, category, gender) => {
+const getScholarshipConfig = async (connection, courseId, category, gender) => {
     const categoryCandidates = getCategoryCandidates(category);
     const loweredCandidates = categoryCandidates.map((item) => item.toLowerCase());
-    const res = await client.query(`
+    
+    const placeholders = loweredCandidates.map(() => "?").join(",");
+    
+    const [rows] = await connection.query(`
         SELECT max_amount FROM course_scholarship_config
-        WHERE course_id = $1
-          AND gender = $2
+        WHERE course_id = ?
+          AND gender = ?
           AND is_active = TRUE
-          AND LOWER(caste_category) = ANY($3::text[])
+          AND LOWER(caste_category) IN (${placeholders})
         ORDER BY
           CASE
-            WHEN LOWER(caste_category) = LOWER($4) THEN 0
+            WHEN LOWER(caste_category) = LOWER(?) THEN 0
             ELSE 1
           END
         LIMIT 1
-    `, [courseId, gender, loweredCandidates, category]);
-    return res.rows[0];
-};
-const getTotalReceived = async (client, ledgerId) => {
-    const res = await client.query(`
-        SELECT COALESCE(SUM(amount_paid), 0) as total 
-        FROM fee_transactions 
-        WHERE ledger_id = $1 AND payment_mode = 'Scholarship' AND status = 'Active'
-    `, [ledgerId]);
-    return parseFloat(res.rows[0].total);
+    `, [courseId, gender, ...loweredCandidates, category]);
+    return rows[0];
 };
 
-const createTransaction = async (client, data) => {
+const getTotalReceived = async (connection, ledgerId) => {
+    const [rows] = await connection.query(`
+        SELECT COALESCE(SUM(amount_paid), 0) as total 
+        FROM fee_transactions 
+        WHERE ledger_id = ? AND payment_mode = 'Scholarship' AND status = 'Active'
+    `, [ledgerId]);
+    return parseFloat(rows[0].total);
+};
+
+const createTransaction = async (connection, data) => {
     const { student_id, ledger_id, amount, mode, reference, receiptNumber, remarks, appId, instNo } = data;
-    const res = await client.query(`
+    const [result] = await connection.query(`
         INSERT INTO fee_transactions (
             student_id, ledger_id, amount_paid, payment_mode, 
             payment_reference, receipt_number, remarks, 
             application_id, installment_no, transaction_date
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_DATE)
-        RETURNING id, receipt_number
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_DATE)
     `, [student_id, ledger_id, amount, mode, reference, receiptNumber, remarks, appId, instNo]);
-    return res.rows[0];
+    
+    const [rows] = await connection.query("SELECT id, receipt_number FROM fee_transactions WHERE id = ?", [result.insertId]);
+    return rows[0];
 };
 
-const updateLedgerStatus = async (client, ledgerId, paid, status) => {
-    await client.query(`
+const updateLedgerStatus = async (connection, ledgerId, paid, status) => {
+    await connection.query(`
         UPDATE student_fee_ledger
-        SET total_paid = $1, status = $2, updated_at = CURRENT_TIMESTAMP
-        WHERE id = $3
+        SET total_paid = ?, status = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
     `, [paid, status, ledgerId]);
 };
 
 const getSummary = async () => {
-    const { rows } = await pool.query(`
+    const [rows] = await pool.query(`
         SELECT d.name as department_name, c.course_name, COUNT(ft.id) as total_disbursals, SUM(ft.amount_paid) as total_amount
         FROM fee_transactions ft
         JOIN student_fee_ledger sfl ON ft.ledger_id = sfl.id
@@ -111,41 +120,41 @@ const getSummary = async () => {
     return rows;
 };
 
-const getTransactionWithLedger = async (client, txnId) => {
-    const res = await client.query(`
+const getTransactionWithLedger = async (connection, txnId) => {
+    const [rows] = await connection.query(`
         SELECT ft.*, sfl.total_paid, sfl.total_yearly_fee
         FROM fee_transactions ft
         JOIN student_fee_ledger sfl ON ft.ledger_id = sfl.id
-        WHERE ft.id = $1 AND ft.payment_mode = 'Scholarship' FOR UPDATE OF sfl
+        WHERE ft.id = ? AND ft.payment_mode = 'Scholarship' FOR UPDATE
     `, [txnId]);
-    return res.rows[0];
+    return rows[0];
 };
 
-const markAsReversed = async (client, txnId) => {
-    await client.query("UPDATE fee_transactions SET status = 'Reversed' WHERE id = $1", [txnId]);
+const markAsReversed = async (connection, txnId) => {
+    await connection.query("UPDATE fee_transactions SET status = 'Reversed' WHERE id = ?", [txnId]);
 };
 
 const getStudentIdByUserId = async (userId) => {
-    const res = await pool.query(
-        "SELECT student_id FROM app_users WHERE id = $1 AND role = 'student'",
+    const [rows] = await pool.query(
+        "SELECT student_id FROM app_users WHERE id = ? AND role = 'student'",
         [userId]
     );
-    return res.rows[0]?.student_id || null;
+    return rows[0]?.student_id || null;
 };
 
 const getStudentForScholarship = async (studentId) => {
-    const res = await pool.query(`
+    const [rows] = await pool.query(`
         SELECT s.id, s.full_name, s.course_id, s.caste_category, s.gender,
                c.course_name
         FROM students s
         JOIN courses c ON c.id = s.course_id
-        WHERE s.id = $1
+        WHERE s.id = ?
     `, [studentId]);
-    return res.rows[0] || null;
+    return rows[0] || null;
 };
 
 const getStudentOutstandingSummary = async (studentId) => {
-    const res = await pool.query(`
+    const [rows] = await pool.query(`
         SELECT
             s.id as student_id,
             COALESCE(SUM(sfl.total_yearly_fee), 0) as total_course_fee,
@@ -153,16 +162,17 @@ const getStudentOutstandingSummary = async (studentId) => {
             COALESCE(SUM(sfl.pending_fee), 0) as total_pending
         FROM students s
         LEFT JOIN student_fee_ledger sfl ON s.id = sfl.student_id
-        WHERE s.id = $1
+        WHERE s.id = ?
         GROUP BY s.id
     `, [studentId]);
-    return res.rows[0] || null;
+    return rows[0] || null;
 };
 
 const getOutstandingSummariesByStudentIds = async (studentIds = []) => {
     if (!studentIds.length) return [];
-
-    const res = await pool.query(`
+    
+    const placeholders = studentIds.map(() => "?").join(",");
+    const [rows] = await pool.query(`
         SELECT
             s.id as student_id,
             COALESCE(SUM(sfl.total_yearly_fee), 0) as total_course_fee,
@@ -170,72 +180,74 @@ const getOutstandingSummariesByStudentIds = async (studentIds = []) => {
             COALESCE(SUM(sfl.pending_fee), 0) as total_pending
         FROM students s
         LEFT JOIN student_fee_ledger sfl ON s.id = sfl.student_id
-        WHERE s.id = ANY($1::int[])
+        WHERE s.id IN (${placeholders})
         GROUP BY s.id
-    `, [studentIds]);
+    `, studentIds);
 
-    return res.rows;
+    return rows;
 };
 
 const getScholarshipConfigForStudent = async (courseId, category, gender) => {
     const categoryCandidates = getCategoryCandidates(category);
     const loweredCandidates = categoryCandidates.map((item) => item.toLowerCase());
-    const res = await pool.query(`
+    const placeholders = loweredCandidates.map(() => "?").join(",");
+    
+    const [rows] = await pool.query(`
         SELECT max_amount
         FROM course_scholarship_config
-        WHERE course_id = $1
-          AND gender = $2
+        WHERE course_id = ?
+          AND gender = ?
           AND is_active = TRUE
-          AND LOWER(caste_category) = ANY($3::text[])
+          AND LOWER(caste_category) IN (${placeholders})
         ORDER BY
           CASE
-            WHEN LOWER(caste_category) = LOWER($4) THEN 0
+            WHEN LOWER(caste_category) = LOWER(?) THEN 0
             ELSE 1
           END
         LIMIT 1
-    `, [courseId, gender, loweredCandidates, category]);
-    return res.rows[0] || null;
+    `, [courseId, gender, ...loweredCandidates, category]);
+    return rows[0] || null;
 };
 
 const findApplicationByStudentAndCycle = async (studentId, _academicCycle = null) => {
     const academicCycle = _academicCycle || null;
-    const res = await pool.query(`
+    const [rows] = await pool.query(`
         SELECT *
         FROM scholarship_applications
-        WHERE student_id = $1
-          AND ($2::text IS NULL OR academic_cycle = $2 OR academic_cycle IS NULL)
+        WHERE student_id = ?
+          AND (? IS NULL OR academic_cycle = ? OR academic_cycle IS NULL)
         ORDER BY
             CASE
-                WHEN academic_cycle = $2 THEN 0
+                WHEN academic_cycle = ? THEN 0
                 WHEN academic_cycle IS NULL THEN 1
                 ELSE 2
             END,
             submitted_at DESC
         LIMIT 1
-    `, [studentId, academicCycle]);
-    return res.rows[0] || null;
+    `, [studentId, academicCycle, academicCycle, academicCycle]);
+    return rows[0] || null;
 };
 
 const findApplicationByIdAndCycle = async (applicationId, _academicCycle = null) => {
     const academicCycle = _academicCycle || null;
-    const res = await pool.query(`
+    const [rows] = await pool.query(`
         SELECT *
         FROM scholarship_applications
-        WHERE application_id = $1
-          AND ($2::text IS NULL OR academic_cycle = $2 OR academic_cycle IS NULL)
+        WHERE application_id = ?
+          AND (? IS NULL OR academic_cycle = ? OR academic_cycle IS NULL)
         ORDER BY
             CASE
-                WHEN academic_cycle = $2 THEN 0
+                WHEN academic_cycle = ? THEN 0
                 WHEN academic_cycle IS NULL THEN 1
                 ELSE 2
             END,
             submitted_at DESC
         LIMIT 1
-    `, [applicationId, academicCycle]);
-    return res.rows[0] || null;
+    `, [applicationId, academicCycle, academicCycle, academicCycle]);
+    return rows[0] || null;
 };
 
-const upsertScholarshipApplication = async (client, data) => {
+const upsertScholarshipApplication = async (connection, data) => {
     const {
         studentId,
         academicCycle,
@@ -245,18 +257,17 @@ const upsertScholarshipApplication = async (client, data) => {
         formOriginalName
     } = data;
 
-    const res = await client.query(`
+    await connection.query(`
         INSERT INTO scholarship_applications (
             student_id, academic_cycle, application_id, application_id_extracted,
             form_path, form_original_name, match_status, submission_status
         )
-        VALUES ($1, $2, $3, $4, $5, $6, 'matched', 'pending_verification')
-        ON CONFLICT (student_id)
-        DO UPDATE SET
-            application_id = EXCLUDED.application_id,
-            application_id_extracted = EXCLUDED.application_id_extracted,
-            form_path = EXCLUDED.form_path,
-            form_original_name = EXCLUDED.form_original_name,
+        VALUES (?, ?, ?, ?, ?, ?, 'matched', 'pending_verification')
+        ON DUPLICATE KEY UPDATE
+            application_id = VALUES(application_id),
+            application_id_extracted = VALUES(application_id_extracted),
+            form_path = VALUES(form_path),
+            form_original_name = VALUES(form_original_name),
             match_status = 'matched',
             submission_status = 'pending_verification',
             submitted_at = CURRENT_TIMESTAMP,
@@ -265,12 +276,13 @@ const upsertScholarshipApplication = async (client, data) => {
             rejected_at = NULL,
             rejected_by = NULL,
             rejection_reason = NULL
-        RETURNING *
     `, [studentId, academicCycle, applicationId, extractedApplicationId, formPath, formOriginalName]);
-    return res.rows[0];
+    
+    const [rows] = await connection.query("SELECT * FROM scholarship_applications WHERE student_id = ?", [studentId]);
+    return rows[0];
 };
 
-const createScholarshipAuditLog = async (client, data) => {
+const createScholarshipAuditLog = async (connection, data) => {
     const {
         applicationRecordId = null,
         actorUserId = null,
@@ -279,39 +291,39 @@ const createScholarshipAuditLog = async (client, data) => {
         details = {}
     } = data;
 
-    await client.query(`
+    await connection.query(`
         INSERT INTO scholarship_audit_logs (
             application_id, actor_user_id, actor_role, action, details
         )
-        VALUES ($1, $2, $3, $4, $5::jsonb)
+        VALUES (?, ?, ?, ?, ?)
     `, [applicationRecordId, actorUserId, actorRole, action, JSON.stringify(details || {})]);
 };
 
 const getStudentApplicationByStudentAndCycle = async (studentId, _academicCycle = null) => {
     const academicCycle = _academicCycle || null;
-    const res = await pool.query(`
+    const [rows] = await pool.query(`
         SELECT sa.id, sa.student_id, sa.academic_cycle, sa.application_id, sa.application_id_extracted,
                sa.form_path, sa.form_original_name, sa.match_status, sa.submission_status,
                sa.submitted_at, sa.approved_at, sa.rejected_at, sa.rejection_reason,
                s.full_name
         FROM scholarship_applications sa
         JOIN students s ON s.id = sa.student_id
-        WHERE sa.student_id = $1
-          AND ($2::text IS NULL OR sa.academic_cycle = $2 OR sa.academic_cycle IS NULL)
+        WHERE sa.student_id = ?
+          AND (? IS NULL OR sa.academic_cycle = ? OR sa.academic_cycle IS NULL)
         ORDER BY
             CASE
-                WHEN sa.academic_cycle = $2 THEN 0
+                WHEN sa.academic_cycle = ? THEN 0
                 WHEN sa.academic_cycle IS NULL THEN 1
                 ELSE 2
             END,
             sa.submitted_at DESC
         LIMIT 1
-    `, [studentId, academicCycle]);
-    return res.rows[0] || null;
+    `, [studentId, academicCycle, academicCycle, academicCycle]);
+    return rows[0] || null;
 };
 
 const listApplicationsForAdmin = async () => {
-    const res = await pool.query(`
+    const [rows] = await pool.query(`
         SELECT sa.id, sa.student_id, sa.academic_cycle, sa.application_id, sa.application_id_extracted,
                sa.form_path, sa.form_original_name, sa.match_status, sa.submission_status,
                sa.submitted_at, sa.approved_at, sa.rejected_at, sa.rejection_reason,
@@ -321,71 +333,74 @@ const listApplicationsForAdmin = async () => {
         JOIN courses c ON c.id = s.course_id
         ORDER BY sa.submitted_at DESC
     `);
-    return res.rows;
+    return rows;
 };
 
 const getPendingApplicationsByCycle = async (_academicCycle = null) => {
     const academicCycle = _academicCycle || null;
-    const res = await pool.query(`
+    const [rows] = await pool.query(`
         SELECT sa.*, s.full_name
         FROM scholarship_applications sa
         JOIN students s ON s.id = sa.student_id
         WHERE sa.submission_status = 'pending_verification'
-          AND ($1::text IS NULL OR sa.academic_cycle = $1 OR sa.academic_cycle IS NULL)
+          AND (? IS NULL OR sa.academic_cycle = ? OR sa.academic_cycle IS NULL)
         ORDER BY
             CASE
-                WHEN sa.academic_cycle = $1 THEN 0
+                WHEN sa.academic_cycle = ? THEN 0
                 WHEN sa.academic_cycle IS NULL THEN 1
                 ELSE 2
             END,
             sa.submitted_at DESC
-    `, [academicCycle]);
-    return res.rows;
+    `, [academicCycle, academicCycle, academicCycle]);
+    return rows;
 };
 
 const getApplicationsByIdsAndCycle = async (applicationIds, _academicCycle = null) => {
     if (!applicationIds.length) return [];
     const academicCycle = _academicCycle || null;
-    const res = await pool.query(`
+    const placeholders = applicationIds.map(() => "?").join(",");
+    const [rows] = await pool.query(`
         SELECT sa.*, s.full_name
         FROM scholarship_applications sa
         JOIN students s ON s.id = sa.student_id
-        WHERE sa.application_id = ANY($1::text[])
-          AND ($2::text IS NULL OR sa.academic_cycle = $2 OR sa.academic_cycle IS NULL)
+        WHERE sa.application_id IN (${placeholders})
+          AND (? IS NULL OR sa.academic_cycle = ? OR sa.academic_cycle IS NULL)
         ORDER BY
             CASE
-                WHEN sa.academic_cycle = $2 THEN 0
+                WHEN sa.academic_cycle = ? THEN 0
                 WHEN sa.academic_cycle IS NULL THEN 1
                 ELSE 2
             END,
             sa.submitted_at DESC
-    `, [applicationIds, academicCycle]);
-    return res.rows;
+    `, [...applicationIds, academicCycle, academicCycle, academicCycle]);
+    return rows;
 };
 
-const markApplicationApproved = async (client, applicationRecordId, approverUserId) => {
-    const res = await client.query(`
+const markApplicationApproved = async (connection, applicationRecordId, approverUserId) => {
+    await connection.query(`
         UPDATE scholarship_applications
         SET submission_status = 'approved',
             approved_at = CURRENT_TIMESTAMP,
-            approved_by = $2
-        WHERE id = $1
-        RETURNING *
-    `, [applicationRecordId, approverUserId]);
-    return res.rows[0] || null;
+            approved_by = ?
+        WHERE id = ?
+    `, [approverUserId, applicationRecordId]);
+    
+    const [rows] = await connection.query("SELECT * FROM scholarship_applications WHERE id = ?", [applicationRecordId]);
+    return rows[0] || null;
 };
 
-const markApplicationConflict = async (client, applicationRecordId, actorUserId, reason = "Duplicate application ID in uploaded gov sheet") => {
-    const res = await client.query(`
+const markApplicationConflict = async (connection, applicationRecordId, actorUserId, reason = "Duplicate application ID in uploaded gov sheet") => {
+    await connection.query(`
         UPDATE scholarship_applications
         SET submission_status = 'conflict',
             rejected_at = CURRENT_TIMESTAMP,
-            rejected_by = $2,
-            rejection_reason = $3
-        WHERE id = $1
-        RETURNING *
-    `, [applicationRecordId, actorUserId, reason]);
-    return res.rows[0] || null;
+            rejected_by = ?,
+            rejection_reason = ?
+        WHERE id = ?
+    `, [actorUserId, reason, applicationRecordId]);
+    
+    const [rows] = await connection.query("SELECT * FROM scholarship_applications WHERE id = ?", [applicationRecordId]);
+    return rows[0] || null;
 };
 
 export default {
