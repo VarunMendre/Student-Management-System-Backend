@@ -9,11 +9,11 @@ const findAll = async () => {
                     SELECT 
                       course_id,
                       CASE 
-                        WHEN caste_category = 'SC / ST' THEN 'scst'
-                        WHEN caste_category = 'VJ / DT / NT / SBC' THEN 'vjnt'
+                        WHEN caste_category IN ('SC', 'ST', 'SC / ST') THEN 'scst'
+                        WHEN caste_category IN ('VJ', 'NT-A', 'NT-B', 'NT-C', 'NT-D', 'SBC', 'VJ / DT / NT / SBC') THEN 'vjnt'
                         WHEN caste_category = 'OBC' THEN 'obc'
-                        WHEN caste_category = 'Open (EBC)' THEN 'ebc'
-                        WHEN caste_category = 'OPEN' THEN 'open'
+                        WHEN caste_category IN ('EWS', 'EBC', 'OPEN') THEN 'general'
+                        WHEN caste_category = 'General' THEN 'general'
                         ELSE lower(caste_category)
                       END as cat_id,
                       JSON_OBJECT(
@@ -22,7 +22,7 @@ const findAll = async () => {
                       ) as details
                     FROM course_scholarship_config 
                     WHERE is_active = TRUE
-                    GROUP BY course_id, caste_category
+                    GROUP BY course_id, cat_id
                   ) sub
                   WHERE sub.course_id = c.id
                  ), JSON_OBJECT()
@@ -31,7 +31,12 @@ const findAll = async () => {
         LEFT JOIN departments d ON c.department_id = d.id 
         ORDER BY c.created_at DESC
     `);
-    return rows;
+    return rows.map(row => ({
+        ...row,
+        scholarshipStructure: typeof row.scholarshipStructure === 'string' 
+            ? JSON.parse(row.scholarshipStructure) 
+            : (row.scholarshipStructure || {})
+    }));
 };
 
 const findById = async (id) => {
@@ -43,11 +48,11 @@ const findById = async (id) => {
                     SELECT 
                       course_id,
                       CASE 
-                        WHEN caste_category = 'SC / ST' THEN 'scst'
-                        WHEN caste_category = 'VJ / DT / NT / SBC' THEN 'vjnt'
+                        WHEN caste_category IN ('SC', 'ST', 'SC / ST') THEN 'scst'
+                        WHEN caste_category IN ('VJ', 'NT-A', 'NT-B', 'NT-C', 'NT-D', 'SBC', 'VJ / DT / NT / SBC') THEN 'vjnt'
                         WHEN caste_category = 'OBC' THEN 'obc'
-                        WHEN caste_category = 'Open (EBC)' THEN 'ebc'
-                        WHEN caste_category = 'OPEN' THEN 'open'
+                        WHEN caste_category IN ('EWS', 'EBC', 'OPEN') THEN 'general'
+                        WHEN caste_category = 'General' THEN 'general'
                         ELSE lower(caste_category)
                       END as cat_id,
                       JSON_OBJECT(
@@ -56,7 +61,7 @@ const findById = async (id) => {
                       ) as details
                     FROM course_scholarship_config 
                     WHERE is_active = TRUE
-                    GROUP BY course_id, caste_category
+                    GROUP BY course_id, cat_id
                   ) sub
                   WHERE sub.course_id = c.id
                  ), JSON_OBJECT()
@@ -65,7 +70,13 @@ const findById = async (id) => {
         LEFT JOIN departments d ON c.department_id = d.id 
         WHERE c.id = ?
     `, [id]);
-    return rows[0];
+    if (!rows[0]) return null;
+    return {
+        ...rows[0],
+        scholarshipStructure: typeof rows[0].scholarshipStructure === 'string' 
+            ? JSON.parse(rows[0].scholarshipStructure) 
+            : (rows[0].scholarshipStructure || {})
+    };
 };
 
 const create = async (data) => {

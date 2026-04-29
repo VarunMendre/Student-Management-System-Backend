@@ -85,33 +85,24 @@ export const getCategoryCandidates = (category = "") => {
     const set = new Set();
 
     if (raw) set.add(raw);
+    set.add(normalized);
 
-    if (["VJA", "NTA", "NTA", "NTB", "NTC", "NTD", "SBC", "VJNT", "DT", "NT"].some((token) => normalized.includes(token))) {
-        set.add("VJ / DT / NT / SBC");
-        set.add("VJ/DT/NT/SBC");
-        set.add("VJ DT NT SBC");
+    if (["VJA", "NTA", "NTB", "NTC", "NTD", "SBC", "VJNT", "DT", "NT"].some((token) => normalized.includes(token))) {
+        set.add("VJ");
+        set.add("NT-A");
+        set.add("NT-B");
+        set.add("NT-C");
+        set.add("NT-D");
+        set.add("SBC");
     }
 
-    if (normalized.includes("SC") || normalized.includes("ST")) {
-        set.add("SC / ST");
-        set.add("SC/ST");
-        set.add("SCST");
-    }
-
-    if (normalized.includes("OBC")) {
-        set.add("OBC");
-    }
-
-    if (normalized.includes("EBC") || normalized.includes("EWS")) {
-        set.add("Open (EBC)");
-        set.add("EBC");
-        set.add("EWS");
-    }
+    if (normalized.includes("SC")) set.add("SC");
+    if (normalized.includes("ST")) set.add("ST");
+    if (normalized.includes("OBC")) set.add("OBC");
+    if (normalized.includes("EWS")) set.add("EWS");
 
     if (normalized.includes("OPEN") || normalized.includes("GENERAL") || normalized.includes("EBC")) {
         set.add("General");
-        set.add("Open");
-        set.add("OPEN");
     }
 
     return [...set];
