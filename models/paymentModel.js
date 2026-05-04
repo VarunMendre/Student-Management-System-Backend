@@ -9,7 +9,7 @@ const findLedgerById = async (ledgerId) => {
 };
 
 const insertTransaction = async (connection, data) => {
-    const { studentId, ledger_id, amount_paid, payment_mode, payment_reference, receiptNumber, remarks, transaction_date } = data;
+    const { studentId, ledger_id, amount_paid, fee_applied_amount, payment_mode, payment_reference, receiptNumber, remarks, transaction_date } = data;
     const [result] = await connection.query(
         `INSERT INTO fee_transactions (student_id, ledger_id, amount_paid, payment_mode, payment_reference, receipt_number, remarks, transaction_date, created_by)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -20,7 +20,7 @@ const insertTransaction = async (connection, data) => {
         `SELECT id, receipt_number, amount_paid, payment_mode, payment_reference, DATE_FORMAT(transaction_date, '%Y-%m-%d') as transaction_date, remarks, created_at FROM fee_transactions WHERE id = ?`,
         [result.insertId]
     );
-    return rows[0];
+    return { ...rows[0], fee_applied_amount };
 };
 
 const updateLedgerTotalPaid = async (connection, ledgerId, totalPaid, status) => {

@@ -5,7 +5,7 @@ import studentModel from "../models/studentModel.js";
 import { withTransaction } from "../utils/dbUtils.js";
 
 const createPayment = async (studentId, data) => {
-    const { ledger_id, amount_paid, payment_mode, payment_reference, remarks, transaction_date } = data;
+    const { ledger_id, amount_paid, fee_applied_amount, payment_mode, payment_reference, remarks, transaction_date } = data;
 
     if (!await studentModel.exists(studentId)) throw new CustomError({
         message: "Student not found",
@@ -26,12 +26,17 @@ const createPayment = async (studentId, data) => {
     });
 
     const pendingFee = parseFloat(ledger.pending_fee);
-    if (amount_paid > pendingFee) throw new CustomError({
-        message: `Amount (${amount_paid}) exceeds pending (${pendingFee})`,
+    const receiptAmount = parseFloat(amount_paid);
+    const appliedAmount = fee_applied_amount === undefined || fee_applied_amount === null
+        ? receiptAmount
+        : parseFloat(fee_applied_amount);
+
+    if (appliedAmount > pendingFee) throw new CustomError({
+        message: `Amount (${appliedAmount}) exceeds pending (${pendingFee})`,
         statusCode: 400,
         code: ErrorCodes.OVERPAYMENT,
         details: {
-            amount_paid,
+            amount_paid: appliedAmount,
             pending_fee: pendingFee
         }
     });
@@ -40,10 +45,10 @@ const createPayment = async (studentId, data) => {
 
     return await withTransaction(async (client) => {
         const transaction = await paymentModel.insertTransaction(client, {
-            studentId, ledger_id, amount_paid, payment_mode, payment_reference, receiptNumber, remarks, transaction_date
+            studentId, ledger_id, amount_paid: receiptAmount, fee_applied_amount: appliedAmount, payment_mode, payment_reference, receiptNumber, remarks, transaction_date
         });
 
-        const newTotalPaid = parseFloat(ledger.total_paid) + amount_paid;
+        const newTotalPaid = parseFloat(ledger.total_paid) + appliedAmount;
         const totalYearlyFee = parseFloat(ledger.total_yearly_fee);
         let status = newTotalPaid >= totalYearlyFee ? "Paid" : (newTotalPaid > 0 ? "Partial" : "Pending");
 
@@ -53,6 +58,7 @@ const createPayment = async (studentId, data) => {
             transaction: {
                 ...transaction,
                 amount_paid: parseFloat(transaction.amount_paid),
+                fee_applied_amount: appliedAmount,
                 amount_in_words: amountToWords(parseFloat(transaction.amount_paid))
             },
             updated_ledger: {

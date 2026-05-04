@@ -16,6 +16,9 @@ export const paymentSchemas = {
             ledger_id: z.number().int().positive().or(z.string().regex(idRegex).transform(Number)),
             amount_paid: z.number().positive("Amount must be greater than 0")
                 .or(z.string().regex(/^\d+(\.\d{1,2})?$/, "Invalid amount format").transform(val => parseFloat(val))),
+            fee_applied_amount: z.number().min(0, "Applied amount cannot be negative")
+                .or(z.string().regex(/^\d+(\.\d{1,2})?$/, "Invalid amount format").transform(val => parseFloat(val)))
+                .optional(),
             payment_mode: z.enum(paymentModes, {
                 errorMap: () => ({ message: `Payment mode must be one of: ${paymentModes.join(", ")}` })
             }),

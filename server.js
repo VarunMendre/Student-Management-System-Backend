@@ -14,9 +14,25 @@ import { verifyAccessToken } from "./middleware/authMiddleware.js";
 import { CustomError, ErrorCodes } from "./utils/customError.js";
 
 const app = express();
+const allowedOrigins = (process.env.FRONTEND_URL )
+    .split(",")
+    .map((origin) => origin.trim().replace(/\/+$/, ""))
+    .filter(Boolean);
+
 app.use(cors({
-    origin: 'http://localhost:5173' || '',
-    credentials: true,                           
+    origin: (origin, callback) => {
+        if (!origin) {
+            return callback(null, true);
+        }
+
+        const normalizedOrigin = origin.replace(/\/+$/, "");
+        if (allowedOrigins.includes(normalizedOrigin)) {
+            return callback(null, true);
+        }
+
+        return callback(new Error(`CORS blocked for origin: ${origin}`));
+    },
+    credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization']
 }));
