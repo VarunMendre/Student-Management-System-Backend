@@ -136,11 +136,15 @@ CREATE TABLE IF NOT EXISTS scholarship_applications (
     student_id INTEGER NOT NULL,
     academic_cycle VARCHAR(20) DEFAULT NULL,
     application_id VARCHAR(100) NOT NULL,
-    application_id_extracted VARCHAR(100) NOT NULL,
+    application_id_extracted VARCHAR(100) DEFAULT NULL,
     form_path VARCHAR(300) NOT NULL,
     form_original_name VARCHAR(255) NOT NULL,
     match_status ENUM('matched') NOT NULL DEFAULT 'matched',
     submission_status ENUM('pending_verification', 'approved', 'rejected', 'conflict') NOT NULL DEFAULT 'pending_verification',
+    ocr_status ENUM('queued', 'processing', 'completed', 'failed', 'mismatch') NOT NULL DEFAULT 'queued',
+    ocr_error VARCHAR(255) DEFAULT NULL,
+    ocr_attempts INT NOT NULL DEFAULT 0,
+    last_ocr_at TIMESTAMP NULL DEFAULT NULL,
     submitted_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     approved_at TIMESTAMP DEFAULT NULL,
     approved_by INTEGER DEFAULT NULL,
@@ -152,6 +156,20 @@ CREATE TABLE IF NOT EXISTS scholarship_applications (
     FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE,
     FOREIGN KEY (approved_by) REFERENCES app_users(id) ON DELETE SET NULL,
     FOREIGN KEY (rejected_by) REFERENCES app_users(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS scholarship_ocr_jobs (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    application_record_id INT NOT NULL,
+    status ENUM('queued', 'processing', 'completed', 'failed') NOT NULL DEFAULT 'queued',
+    attempts INT NOT NULL DEFAULT 0,
+    last_error VARCHAR(255) DEFAULT NULL,
+    available_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    locked_at TIMESTAMP NULL DEFAULT NULL,
+    processed_at TIMESTAMP NULL DEFAULT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (application_record_id) REFERENCES scholarship_applications(id) ON DELETE CASCADE
 );
 
 -- Scholarship audit trail
@@ -208,7 +226,9 @@ CREATE INDEX idx_txn_application_id ON fee_transactions(application_id);
 
 CREATE INDEX idx_sch_app_student ON scholarship_applications(student_id);
 CREATE INDEX idx_sch_app_status ON scholarship_applications(submission_status);
+CREATE INDEX idx_sch_app_ocr_status ON scholarship_applications(ocr_status);
 CREATE INDEX idx_sch_app_submitted ON scholarship_applications(submitted_at);
 
 CREATE INDEX idx_sch_audit_application ON scholarship_audit_logs(application_id);
 CREATE INDEX idx_sch_audit_created ON scholarship_audit_logs(created_at);
+CREATE INDEX idx_sch_ocr_jobs_status ON scholarship_ocr_jobs(status, available_at);

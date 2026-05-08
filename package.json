@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "dev": "node --watch server.js",
+    "worker:ocr": "node ocrWorker.js",
     "seed:auth": "node seeds-auth.js"
   },
   "repository": {

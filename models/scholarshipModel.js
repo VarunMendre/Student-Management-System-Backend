@@ -260,9 +260,10 @@ const upsertScholarshipApplication = async (connection, data) => {
     await connection.query(`
         INSERT INTO scholarship_applications (
             student_id, academic_cycle, application_id, application_id_extracted,
-            form_path, form_original_name, match_status, submission_status
+            form_path, form_original_name, match_status, submission_status,
+            ocr_status, ocr_error, ocr_attempts, last_ocr_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, 'matched', 'pending_verification')
+        VALUES (?, ?, ?, ?, ?, ?, 'matched', 'pending_verification', 'queued', NULL, 0, NULL)
         ON DUPLICATE KEY UPDATE
             application_id = VALUES(application_id),
             application_id_extracted = VALUES(application_id_extracted),
@@ -270,6 +271,10 @@ const upsertScholarshipApplication = async (connection, data) => {
             form_original_name = VALUES(form_original_name),
             match_status = 'matched',
             submission_status = 'pending_verification',
+            ocr_status = 'queued',
+            ocr_error = NULL,
+            ocr_attempts = 0,
+            last_ocr_at = NULL,
             submitted_at = CURRENT_TIMESTAMP,
             approved_at = NULL,
             approved_by = NULL,
@@ -280,6 +285,103 @@ const upsertScholarshipApplication = async (connection, data) => {
     
     const [rows] = await connection.query("SELECT * FROM scholarship_applications WHERE student_id = ?", [studentId]);
     return rows[0];
+};
+
+const createScholarshipOcrJob = async (connection, applicationRecordId) => {
+    const [result] = await connection.query(`
+        INSERT INTO scholarship_ocr_jobs (
+            application_record_id, status, attempts, last_error, available_at, locked_at, processed_at
+        )
+        VALUES (?, 'queued', 0, NULL, CURRENT_TIMESTAMP, NULL, NULL)
+    `, [applicationRecordId]);
+
+    const [rows] = await connection.query("SELECT * FROM scholarship_ocr_jobs WHERE id = ?", [result.insertId]);
+    return rows[0] || null;
+};
+
+const getScholarshipApplicationById = async (applicationRecordId) => {
+    const [rows] = await pool.query(`
+        SELECT *
+        FROM scholarship_applications
+        WHERE id = ?
+        LIMIT 1
+    `, [applicationRecordId]);
+    return rows[0] || null;
+};
+
+const claimNextScholarshipOcrJob = async (connection) => {
+    const [rows] = await connection.query(`
+        SELECT *
+        FROM scholarship_ocr_jobs
+        WHERE status = 'queued'
+          AND available_at <= CURRENT_TIMESTAMP
+        ORDER BY created_at ASC
+        LIMIT 1
+        FOR UPDATE
+    `);
+
+    const job = rows[0];
+    if (!job) return null;
+
+    await connection.query(`
+        UPDATE scholarship_ocr_jobs
+        SET status = 'processing',
+            locked_at = CURRENT_TIMESTAMP,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+    `, [job.id]);
+
+    return { ...job, status: "processing" };
+};
+
+const markScholarshipApplicationOcrProcessing = async (connection, applicationRecordId) => {
+    await connection.query(`
+        UPDATE scholarship_applications
+        SET ocr_status = 'processing',
+            ocr_error = NULL
+        WHERE id = ?
+    `, [applicationRecordId]);
+};
+
+const markScholarshipApplicationOcrResult = async (connection, {
+    applicationRecordId,
+    extractedApplicationId,
+    ocrStatus,
+    ocrError = null
+}) => {
+    await connection.query(`
+        UPDATE scholarship_applications
+        SET application_id_extracted = ?,
+            ocr_status = ?,
+            ocr_error = ?,
+            ocr_attempts = ocr_attempts + 1,
+            last_ocr_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+    `, [extractedApplicationId, ocrStatus, ocrError, applicationRecordId]);
+};
+
+const markScholarshipOcrJobCompleted = async (connection, jobId) => {
+    await connection.query(`
+        UPDATE scholarship_ocr_jobs
+        SET status = 'completed',
+            attempts = attempts + 1,
+            last_error = NULL,
+            processed_at = CURRENT_TIMESTAMP,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+    `, [jobId]);
+};
+
+const markScholarshipOcrJobFailed = async (connection, jobId, errorMessage) => {
+    await connection.query(`
+        UPDATE scholarship_ocr_jobs
+        SET status = 'failed',
+            attempts = attempts + 1,
+            last_error = ?,
+            processed_at = CURRENT_TIMESTAMP,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+    `, [errorMessage, jobId]);
 };
 
 const createScholarshipAuditLog = async (connection, data) => {
@@ -304,6 +406,7 @@ const getStudentApplicationByStudentAndCycle = async (studentId, _academicCycle 
     const [rows] = await pool.query(`
         SELECT sa.id, sa.student_id, sa.academic_cycle, sa.application_id, sa.application_id_extracted,
                sa.form_path, sa.form_original_name, sa.match_status, sa.submission_status,
+               sa.ocr_status, sa.ocr_error, sa.ocr_attempts, sa.last_ocr_at,
                sa.submitted_at, sa.approved_at, sa.rejected_at, sa.rejection_reason,
                s.full_name
         FROM scholarship_applications sa
@@ -326,6 +429,7 @@ const listApplicationsForAdmin = async () => {
     const [rows] = await pool.query(`
         SELECT sa.id, sa.student_id, sa.academic_cycle, sa.application_id, sa.application_id_extracted,
                sa.form_path, sa.form_original_name, sa.match_status, sa.submission_status,
+               sa.ocr_status, sa.ocr_error, sa.ocr_attempts, sa.last_ocr_at,
                sa.submitted_at, sa.approved_at, sa.rejected_at, sa.rejection_reason,
                s.full_name, s.course_id, c.course_name
         FROM scholarship_applications sa
@@ -423,6 +527,13 @@ export default {
     findApplicationByStudentAndCycle,
     findApplicationByIdAndCycle,
     upsertScholarshipApplication,
+    createScholarshipOcrJob,
+    getScholarshipApplicationById,
+    claimNextScholarshipOcrJob,
+    markScholarshipApplicationOcrProcessing,
+    markScholarshipApplicationOcrResult,
+    markScholarshipOcrJobCompleted,
+    markScholarshipOcrJobFailed,
     createScholarshipAuditLog,
     getStudentApplicationByStudentAndCycle,
     listApplicationsForAdmin,

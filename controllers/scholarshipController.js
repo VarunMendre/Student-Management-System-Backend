@@ -61,7 +61,7 @@ const submitApplication = asyncHandler(async (req, res) => {
         manualApplicationId: application_id,
         file: req.file
     });
-    successResponse(res, { data: result }, "Application submitted and pending verification", 201);
+    successResponse(res, { data: result }, "Application uploaded successfully and queued for OCR verification", 201);
 });
 
 const getMyApplication = asyncHandler(async (req, res) => {

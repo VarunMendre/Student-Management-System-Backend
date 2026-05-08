@@ -3,10 +3,8 @@ import { generateReceiptNumber } from "../utils/receiptGenerator.js";
 import { withTransaction, withTransactionSilent } from "../utils/dbUtils.js";
 import fs from "fs";
 import path from "path";
-import { PDFParse } from "pdf-parse";
-import { createWorker } from "tesseract.js";
 import { CustomError, ErrorCodes } from "../utils/customError.js";
-import { extractApplicationIdFromPdfText, getAcademicCycle, normalizeApplicationId, textContainsApplicationId } from "../utils/scholarshipParser.js";
+import { getAcademicCycle, normalizeApplicationId } from "../utils/scholarshipParser.js";
 
 const getCourseScholarshipConfig = async (courseId) => {
     return await scholarshipModel.getConfigByCourse(courseId);
@@ -37,16 +35,6 @@ const deleteFileSafely = async (filePath) => {
         await fs.promises.unlink(filePath);
     } catch (_error) {
         // no-op
-    }
-};
-
-const extractTextFromImage = async (imagePath) => {
-    const worker = await createWorker("eng");
-    try {
-        const { data } = await worker.recognize(imagePath);
-        return data?.text || "";
-    } finally {
-        await worker.terminate();
     }
 };
 
@@ -112,60 +100,6 @@ const submitScholarshipApplication = async ({ actorUserId, actorRole, manualAppl
         });
     }
 
-    let extractedId = null;
-    const isImageUpload = file.mimetype !== "application/pdf";
-    try {
-        let detectedText = "";
-        if (file.mimetype === "application/pdf") {
-            const fileBuffer = await fs.promises.readFile(file.path);
-            const parser = new PDFParse({ data: fileBuffer });
-            const parsed = await parser.getText();
-            await parser.destroy();
-            detectedText = parsed?.text || "";
-        } else {
-            detectedText = await extractTextFromImage(file.path);
-        }
-        extractedId = extractApplicationIdFromPdfText(detectedText.toUpperCase());
-
-        // OCR on images can miss separators or confuse lookalike characters.
-        if (!extractedId && textContainsApplicationId(detectedText, normalizedManualId)) {
-            extractedId = normalizedManualId;
-        }
-    } catch (_error) {
-        await deleteFileSafely(file.path);
-        throw new CustomError({
-            message: "Could not read uploaded file content. For images, ensure ID text is clear and readable",
-            statusCode: 422,
-            code: ErrorCodes.VALIDATION_ERROR
-        });
-    }
-
-    if (!extractedId) {
-        if (isImageUpload && normalizedManualId) {
-            extractedId = normalizedManualId;
-        } else {
-            await deleteFileSafely(file.path);
-            throw new CustomError({
-                message: "Application ID was not detected in the uploaded file",
-                statusCode: 422,
-                code: ErrorCodes.VALIDATION_ERROR
-            });
-        }
-    }
-
-    if (normalizedManualId !== extractedId) {
-        await deleteFileSafely(file.path);
-        throw new CustomError({
-            message: "Entered Application ID does not match the ID found in PDF",
-            statusCode: 422,
-            code: ErrorCodes.VALIDATION_ERROR,
-            details: {
-                entered_application_id: normalizedManualId,
-                extracted_application_id: extractedId
-            }
-        });
-    }
-
     const publicFormPath = resolvePublicUploadPath(file.path);
     if (!publicFormPath) {
         await deleteFileSafely(file.path);
@@ -187,10 +121,12 @@ const submitScholarshipApplication = async ({ actorUserId, actorRole, manualAppl
             studentId,
             academicCycle,
             applicationId: normalizedManualId,
-            extractedApplicationId: extractedId,
+            extractedApplicationId: null,
             formPath: publicFormPath,
             formOriginalName: file.originalname || "scholarship_form.pdf"
         });
+
+        await scholarshipModel.createScholarshipOcrJob(client, saved.id);
 
         await scholarshipModel.createScholarshipAuditLog(client, {
             applicationRecordId: saved.id,
@@ -199,7 +135,7 @@ const submitScholarshipApplication = async ({ actorUserId, actorRole, manualAppl
             action: "submitted",
             details: {
                 application_id: normalizedManualId,
-                image_ocr_fallback_used: isImageUpload && extractedId === normalizedManualId
+                ocr_status: "queued"
             }
         });
 
@@ -210,6 +146,8 @@ const submitScholarshipApplication = async ({ actorUserId, actorRole, manualAppl
             application_id: saved.application_id,
             application_id_extracted: saved.application_id_extracted,
             form_url: saved.form_path,
+            ocr_status: saved.ocr_status,
+            ocr_error: saved.ocr_error,
             submission_status: saved.submission_status,
             submitted_at: saved.submitted_at
         };
