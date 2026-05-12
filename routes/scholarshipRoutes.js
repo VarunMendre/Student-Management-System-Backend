@@ -1,6 +1,6 @@
 import express from "express";
 import scholarshipController from "../controllers/scholarshipController.js";
-import { authorizeRoles } from "../middleware/authMiddleware.js";
+import { authorizeRoles, authorizeStudentOrRoles } from "../middleware/authMiddleware.js";
 import { scholarshipFormUpload } from "../middleware/uploadMiddleware.js";
 
 const router = express.Router();
@@ -13,6 +13,7 @@ router.post(
     scholarshipController.submitApplication
 );
 router.get("/application/me", authorizeRoles("student"), scholarshipController.getMyApplication);
+router.get("/applications/:id/form-url", authorizeStudentOrRoles("admin", "accountant", "principal"), scholarshipController.getApplicationFormUrl);
 
 // Admin-side student applications + reconciliation
 router.get("/applications", authorizeRoles("admin", "accountant", "principal"), scholarshipController.listApplications);

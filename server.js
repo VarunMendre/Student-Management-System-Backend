@@ -14,7 +14,7 @@ import { verifyAccessToken } from "./middleware/authMiddleware.js";
 import { CustomError, ErrorCodes } from "./utils/customError.js";
 
 const app = express();
-const allowedOrigins = (process.env.FRONTEND_URL )
+const allowedOrigins = (process.env.FRONTEND_URL || "")
     .split(",")
     .map((origin) => origin.trim().replace(/\/+$/, ""))
     .filter(Boolean);
@@ -26,7 +26,7 @@ app.use(cors({
         }
 
         const normalizedOrigin = origin.replace(/\/+$/, "");
-        if (allowedOrigins.includes(normalizedOrigin)) {
+        if (allowedOrigins.length === 0 || allowedOrigins.includes(normalizedOrigin)) {
             return callback(null, true);
         }
 

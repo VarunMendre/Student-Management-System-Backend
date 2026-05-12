@@ -1,10 +1,9 @@
 import scholarshipModel from "../models/scholarshipModel.js";
 import { generateReceiptNumber } from "../utils/receiptGenerator.js";
 import { withTransaction, withTransactionSilent } from "../utils/dbUtils.js";
-import fs from "fs";
-import path from "path";
 import { CustomError, ErrorCodes } from "../utils/customError.js";
 import { getAcademicCycle, normalizeApplicationId } from "../utils/scholarshipParser.js";
+import { uploadScholarshipForm, deleteStoredScholarshipForm, getScholarshipFormAccessUrl } from "./fileStorageService.js";
 
 const getCourseScholarshipConfig = async (courseId) => {
     return await scholarshipModel.getConfigByCourse(courseId);
@@ -17,25 +16,6 @@ const updateCourseScholarshipConfig = async (courseId, configs) => {
         }
         return { message: "Scholarship configuration updated" };
     });
-};
-
-const resolvePublicUploadPath = (absolutePath) => {
-    const uploadsRoot = path.resolve(process.cwd(), "uploads");
-    const normalizedAbsolute = path.resolve(absolutePath);
-    if (!normalizedAbsolute.startsWith(uploadsRoot)) {
-        return null;
-    }
-    const relativePath = path.relative(uploadsRoot, normalizedAbsolute).replace(/\\/g, "/");
-    return `/uploads/${relativePath}`;
-};
-
-const deleteFileSafely = async (filePath) => {
-    if (!filePath) return;
-    try {
-        await fs.promises.unlink(filePath);
-    } catch (_error) {
-        // no-op
-    }
 };
 
 const ensureStudentEligibility = async (studentId) => {
@@ -59,7 +39,7 @@ const ensureStudentEligibility = async (studentId) => {
 };
 
 const submitScholarshipApplication = async ({ actorUserId, actorRole, manualApplicationId, file }) => {
-    if (!file?.path) {
+    if (!file?.buffer?.length) {
         throw new CustomError({
             message: "Scholarship form PDF is required",
             statusCode: 400,
@@ -69,7 +49,6 @@ const submitScholarshipApplication = async ({ actorUserId, actorRole, manualAppl
 
     const normalizedManualId = normalizeApplicationId(manualApplicationId);
     if (!normalizedManualId || normalizedManualId.length < 6) {
-        await deleteFileSafely(file.path);
         throw new CustomError({
             message: "Invalid application ID. Use at least 6 alphanumeric characters",
             statusCode: 400,
@@ -79,7 +58,6 @@ const submitScholarshipApplication = async ({ actorUserId, actorRole, manualAppl
 
     const studentId = await scholarshipModel.getStudentIdByUserId(actorUserId);
     if (!studentId) {
-        await deleteFileSafely(file.path);
         throw new CustomError({
             message: "Student account mapping not found",
             statusCode: 404,
@@ -92,7 +70,6 @@ const submitScholarshipApplication = async ({ actorUserId, actorRole, manualAppl
 
     const duplicateOwner = await scholarshipModel.findApplicationByIdAndCycle(normalizedManualId, academicCycle);
     if (duplicateOwner && Number(duplicateOwner.student_id) !== Number(studentId)) {
-        await deleteFileSafely(file.path);
         throw new CustomError({
             message: "Application ID already used by another student",
             statusCode: 409,
@@ -100,44 +77,46 @@ const submitScholarshipApplication = async ({ actorUserId, actorRole, manualAppl
         });
     }
 
-    const publicFormPath = resolvePublicUploadPath(file.path);
-    if (!publicFormPath) {
-        await deleteFileSafely(file.path);
-        throw new CustomError({
-            message: "Failed to store uploaded file",
-            statusCode: 500,
-            code: ErrorCodes.DATABASE_ERROR
-        });
-    }
+    const storedFormPath = await uploadScholarshipForm({
+        buffer: file.buffer,
+        originalName: file.originalname || "scholarship_form.pdf",
+        mimeType: file.mimetype,
+        studentId,
+        applicationId: normalizedManualId
+    });
 
-    return await withTransaction(async (client) => {
-        const existing = await scholarshipModel.findApplicationByStudentAndCycle(studentId, academicCycle);
-        if (existing?.form_path && existing.form_path !== publicFormPath) {
-            const oldPath = path.resolve(process.cwd(), existing.form_path.replace(/^\/uploads\//, "uploads/"));
-            await deleteFileSafely(oldPath);
+    const existing = await scholarshipModel.findApplicationByStudentAndCycle(studentId, academicCycle);
+
+    try {
+        const saved = await withTransaction(async (client) => {
+            const persisted = await scholarshipModel.upsertScholarshipApplication(client, {
+                studentId,
+                academicCycle,
+                applicationId: normalizedManualId,
+                extractedApplicationId: null,
+                formPath: storedFormPath,
+                formOriginalName: file.originalname || "scholarship_form.pdf"
+            });
+
+            await scholarshipModel.createScholarshipOcrJob(client, persisted.id);
+
+            await scholarshipModel.createScholarshipAuditLog(client, {
+                applicationRecordId: persisted.id,
+                actorUserId,
+                actorRole,
+                action: "submitted",
+                details: {
+                    application_id: normalizedManualId,
+                    ocr_status: "queued"
+                }
+            });
+
+            return persisted;
+        });
+
+        if (existing?.form_path && existing.form_path !== storedFormPath) {
+            await deleteStoredScholarshipForm(existing.form_path);
         }
-
-        const saved = await scholarshipModel.upsertScholarshipApplication(client, {
-            studentId,
-            academicCycle,
-            applicationId: normalizedManualId,
-            extractedApplicationId: null,
-            formPath: publicFormPath,
-            formOriginalName: file.originalname || "scholarship_form.pdf"
-        });
-
-        await scholarshipModel.createScholarshipOcrJob(client, saved.id);
-
-        await scholarshipModel.createScholarshipAuditLog(client, {
-            applicationRecordId: saved.id,
-            actorUserId,
-            actorRole,
-            action: "submitted",
-            details: {
-                application_id: normalizedManualId,
-                ocr_status: "queued"
-            }
-        });
 
         return {
             id: saved.id,
@@ -151,7 +130,42 @@ const submitScholarshipApplication = async ({ actorUserId, actorRole, manualAppl
             submission_status: saved.submission_status,
             submitted_at: saved.submitted_at
         };
+    } catch (error) {
+        await deleteStoredScholarshipForm(storedFormPath);
+        throw error;
+    }
+};
+
+const getScholarshipApplicationFormAccessUrl = async ({ applicationId, actorUserId, actorRole, requestOrigin }) => {
+    const application = await scholarshipModel.getScholarshipApplicationById(applicationId);
+    if (!application) {
+        throw new CustomError({
+            message: "Scholarship application not found",
+            statusCode: 404,
+            code: ErrorCodes.NOT_FOUND
+        });
+    }
+
+    if (actorRole === "student") {
+        const studentId = await scholarshipModel.getStudentIdByUserId(actorUserId);
+        if (!studentId || Number(application.student_id) !== Number(studentId)) {
+            throw new CustomError({
+                message: "Forbidden",
+                statusCode: 403,
+                code: ErrorCodes.FORBIDDEN
+            });
+        }
+    }
+
+    const url = await getScholarshipFormAccessUrl({
+        storedPath: application.form_path,
+        requestOrigin
     });
+
+    return {
+        url,
+        expires_in_seconds: Number(process.env.S3_SIGNED_URL_EXPIRES_SECONDS || 900)
+    };
 };
 
 const getMyScholarshipApplication = async ({ actorUserId }) => {
@@ -453,5 +467,6 @@ export default {
     getCourseScholarshipConfig, updateCourseScholarshipConfig,
     disburseScholarshipBatch, getScholarshipSummary, reverseScholarship,
     submitScholarshipApplication, getMyScholarshipApplication,
-    listStudentApplications, reconcileGovSheetRows
+    listStudentApplications, reconcileGovSheetRows,
+    getScholarshipApplicationFormAccessUrl
 };

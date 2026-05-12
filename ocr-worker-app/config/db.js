@@ -16,7 +16,7 @@ export const pool = mysql.createPool({
   password: String(process.env.MYSQL_PASSWORD || ""),
   database: process.env.MYSQL_DB,
   waitForConnections: true,
-  connectionLimit: 90000,
+  connectionLimit: 10,
   queueLimit: 0,
 });
 
@@ -30,4 +30,3 @@ export const pool = mysql.createPool({
         console.error("MySQL Connection Error:", err.message);
     }
 })();
- 

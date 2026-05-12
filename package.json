@@ -2,12 +2,14 @@
   "name": "student-management-system-backend",
   "version": "1.0.0",
   "description": "",
-  "main": "db.js",
+  "main": "server.js",
   "type": "module",
   "scripts": {
+    "start": "node server.js",
     "dev": "node --watch server.js",
     "worker:ocr": "node ocrWorker.js",
-    "seed:auth": "node seeds-auth.js"
+    "seed:auth": "node seeds/seeds-auth.js",
+    "seed:db": "node seeds/seeds-db.js"
   },
   "repository": {
     "type": "git",
@@ -21,6 +23,8 @@
   },
   "homepage": "https://github.com/VarunMendre/Student-Management-System-Backend#readme",
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1045.0",
+    "@aws-sdk/s3-request-presigner": "^3.1045.0",
     "bcryptjs": "^3.0.3",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",

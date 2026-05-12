@@ -1,2 +1,9 @@
 node_modules
 .env
+ocr-worker-app/node_modules
+ocr-worker-app/node_modules.zip
+uploads/*
+!uploads/.gitkeep
+!uploads/scholarship-forms/
+uploads/scholarship-forms/*
+!uploads/scholarship-forms/.gitkeep
