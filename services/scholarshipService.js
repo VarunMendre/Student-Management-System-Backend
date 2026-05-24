@@ -9,6 +9,24 @@ const getCourseScholarshipConfig = async (courseId) => {
     return await scholarshipModel.getConfigByCourse(courseId);
 };
 
+const attachScholarshipFormUrls = async (application, requestOrigin) => {
+    if (!application) {
+        return null;
+    }
+
+    const resolvedFormUrl = await getScholarshipFormAccessUrl({
+        storedPath: application.form_path,
+        requestOrigin
+    });
+
+    return {
+        ...application,
+        stored_form_path: application.form_path,
+        form_path: resolvedFormUrl,
+        form_url: resolvedFormUrl
+    };
+};
+
 const updateCourseScholarshipConfig = async (courseId, configs) => {
     return await withTransaction(async (client) => {
         for (const { caste_category, gender, max_amount } of configs) {
@@ -118,18 +136,20 @@ const submitScholarshipApplication = async ({ actorUserId, actorRole, manualAppl
             await deleteStoredScholarshipForm(existing.form_path);
         }
 
-        return {
-            id: saved.id,
-            student_id: saved.student_id,
-            academic_cycle: saved.academic_cycle,
-            application_id: saved.application_id,
-            application_id_extracted: saved.application_id_extracted,
-            form_url: saved.form_path,
-            ocr_status: saved.ocr_status,
-            ocr_error: saved.ocr_error,
-            submission_status: saved.submission_status,
-            submitted_at: saved.submitted_at
-        };
+    return {
+        id: saved.id,
+        student_id: saved.student_id,
+        academic_cycle: saved.academic_cycle,
+        application_id: saved.application_id,
+        application_id_extracted: saved.application_id_extracted,
+        stored_form_path: saved.form_path,
+        form_path: saved.form_path,
+        form_url: saved.form_path,
+        ocr_status: saved.ocr_status,
+        ocr_error: saved.ocr_error,
+        submission_status: saved.submission_status,
+        submitted_at: saved.submitted_at
+    };
     } catch (error) {
         await deleteStoredScholarshipForm(storedFormPath);
         throw error;
@@ -182,25 +202,13 @@ const getMyScholarshipApplication = async ({ actorUserId, requestOrigin }) => {
         return null;
     }
 
-    return {
-        ...application,
-        form_url: await getScholarshipFormAccessUrl({
-            storedPath: application.form_path,
-            requestOrigin
-        })
-    };
+    return attachScholarshipFormUrls(application, requestOrigin);
 };
 
 const listStudentApplications = async ({ requestOrigin }) => {
     const applications = await scholarshipModel.listApplicationsForAdmin();
 
-    return Promise.all(applications.map(async (application) => ({
-        ...application,
-        form_url: await getScholarshipFormAccessUrl({
-            storedPath: application.form_path,
-            requestOrigin
-        })
-    })));
+    return Promise.all(applications.map((application) => attachScholarshipFormUrls(application, requestOrigin)));
 };
 
 const reconcileGovSheetRows = async ({ actorUserId, actorRole, rows = [] }) => {

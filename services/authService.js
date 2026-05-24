@@ -8,10 +8,12 @@ import { normalizeEmail } from "../utils/studentOptions.js";
 const ACCESS_EXPIRY = process.env.JWT_ACCESS_EXPIRY || "15m";
 const REFRESH_EXPIRY = process.env.JWT_REFRESH_EXPIRY || "7d";
 const REFRESH_COOKIE_MAX_AGE = 7 * 24 * 60 * 60 * 1000;
-const COOKIE_SAME_SITE = process.env.COOKIE_SAME_SITE || (process.env.NODE_ENV === "production" ? "none" : "lax");
+const FRONTEND_URL = process.env.FRONTEND_URL || "";
+const IS_HTTPS_FRONTEND = FRONTEND_URL.startsWith("https://");
+const COOKIE_SAME_SITE = process.env.COOKIE_SAME_SITE || (IS_HTTPS_FRONTEND ? "none" : "lax");
 const COOKIE_SECURE = process.env.COOKIE_SECURE
     ? String(process.env.COOKIE_SECURE).toLowerCase() === "true"
-    : process.env.NODE_ENV === "production";
+    : (COOKIE_SAME_SITE === "none" || IS_HTTPS_FRONTEND);
 const COOKIE_DOMAIN = process.env.COOKIE_DOMAIN || undefined;
 
 const getRefreshCookieOptions = () => {
