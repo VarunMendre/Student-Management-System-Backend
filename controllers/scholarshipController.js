@@ -66,7 +66,8 @@ const submitApplication = asyncHandler(async (req, res) => {
 
 const getMyApplication = asyncHandler(async (req, res) => {
     const result = await scholarshipService.getMyScholarshipApplication({
-        actorUserId: req.user.userId
+        actorUserId: req.user.userId,
+        requestOrigin: `${req.protocol}://${req.get("host")}`
     });
     successResponse(res, { data: result }, "Scholarship application fetched successfully");
 });
@@ -81,8 +82,10 @@ const getApplicationFormUrl = asyncHandler(async (req, res) => {
     successResponse(res, { data: result }, "Scholarship form access URL generated successfully");
 });
 
-const listApplications = asyncHandler(async (_req, res) => {
-    const data = await scholarshipService.listStudentApplications();
+const listApplications = asyncHandler(async (req, res) => {
+    const data = await scholarshipService.listStudentApplications({
+        requestOrigin: `${req.protocol}://${req.get("host")}`
+    });
     successResponse(res, { data }, "Scholarship applications fetched successfully");
 });
 

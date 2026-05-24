@@ -168,7 +168,7 @@ const getScholarshipApplicationFormAccessUrl = async ({ applicationId, actorUser
     };
 };
 
-const getMyScholarshipApplication = async ({ actorUserId }) => {
+const getMyScholarshipApplication = async ({ actorUserId, requestOrigin }) => {
     const studentId = await scholarshipModel.getStudentIdByUserId(actorUserId);
     if (!studentId) {
         throw new CustomError({
@@ -177,11 +177,30 @@ const getMyScholarshipApplication = async ({ actorUserId }) => {
             code: ErrorCodes.NOT_FOUND
         });
     }
-    return scholarshipModel.getStudentApplicationByStudentAndCycle(studentId, getAcademicCycle());
+    const application = await scholarshipModel.getStudentApplicationByStudentAndCycle(studentId, getAcademicCycle());
+    if (!application) {
+        return null;
+    }
+
+    return {
+        ...application,
+        form_url: await getScholarshipFormAccessUrl({
+            storedPath: application.form_path,
+            requestOrigin
+        })
+    };
 };
 
-const listStudentApplications = async () => {
-    return scholarshipModel.listApplicationsForAdmin();
+const listStudentApplications = async ({ requestOrigin }) => {
+    const applications = await scholarshipModel.listApplicationsForAdmin();
+
+    return Promise.all(applications.map(async (application) => ({
+        ...application,
+        form_url: await getScholarshipFormAccessUrl({
+            storedPath: application.form_path,
+            requestOrigin
+        })
+    })));
 };
 
 const reconcileGovSheetRows = async ({ actorUserId, actorRole, rows = [] }) => {
