@@ -1,4 +1,11 @@
 import { pool } from "../config/db.js";
+import { formatCourseDuration, parseCourseDurationYears } from "../utils/courseDuration.js";
+
+const normalizeCourseRow = (row) => ({
+    ...row,
+    duration: formatCourseDuration(row?.duration),
+    duration_years: parseCourseDurationYears(row?.duration, 3)
+});
 
 const findAll = async () => {
     const [rows] = await pool.query(`
@@ -31,10 +38,10 @@ const findAll = async () => {
         LEFT JOIN departments d ON c.department_id = d.id 
         ORDER BY c.created_at DESC
     `);
-    return rows.map(row => ({
+    return rows.map(row => normalizeCourseRow({
         ...row,
-        scholarshipStructure: typeof row.scholarshipStructure === 'string' 
-            ? JSON.parse(row.scholarshipStructure) 
+        scholarshipStructure: typeof row.scholarshipStructure === 'string'
+            ? JSON.parse(row.scholarshipStructure)
             : (row.scholarshipStructure || {})
     }));
 };
@@ -71,12 +78,12 @@ const findById = async (id) => {
         WHERE c.id = ?
     `, [id]);
     if (!rows[0]) return null;
-    return {
+    return normalizeCourseRow({
         ...rows[0],
-        scholarshipStructure: typeof rows[0].scholarshipStructure === 'string' 
-            ? JSON.parse(rows[0].scholarshipStructure) 
+        scholarshipStructure: typeof rows[0].scholarshipStructure === 'string'
+            ? JSON.parse(rows[0].scholarshipStructure)
             : (rows[0].scholarshipStructure || {})
-    };
+    });
 };
 
 const create = async (data) => {
@@ -88,7 +95,7 @@ const create = async (data) => {
         [course_name, duration, department_id, course_code, program_level]
     );
     const [rows] = await pool.query("SELECT * FROM courses WHERE id = ?", [result.insertId]);
-    return rows[0];
+    return normalizeCourseRow(rows[0]);
 };
 
 const update = async (id, data) => {
@@ -100,7 +107,7 @@ const update = async (id, data) => {
         [course_name, duration, department_id, course_code, program_level, id]
     );
     const [rows] = await pool.query("SELECT * FROM courses WHERE id = ?", [id]);
-    return rows[0];
+    return normalizeCourseRow(rows[0]);
 };
 
 const remove = async (id) => {

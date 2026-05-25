@@ -1,10 +1,12 @@
 import { z } from "zod";
 import { normalizeText } from "../../utils/studentOptions.js";
+import { parseCourseDurationYears } from "../../utils/courseDuration.js";
 
 const idSchema = z.string().regex(/^\d+$/, "Invalid ID format");
 const normalizedTextSchema = (label, min = 2, max = 150) => z.string()
     .transform(normalizeText)
     .pipe(z.string().min(min, `${label} must be at least ${min} characters`).max(max, `${label} must be at most ${max} characters`));
+const durationSchema = z.preprocess((value) => parseCourseDurationYears(value, value), z.number().int().min(1).max(10));
 
 export const courseSchemas = {
     byId: z.object({
@@ -15,7 +17,7 @@ export const courseSchemas = {
     create: z.object({
         body: z.object({
             course_name: normalizedTextSchema("Course name"),
-            duration: z.coerce.number().int().min(1).max(10),
+            duration: durationSchema,
             department_id: z.coerce.number().int().positive(),
             course_code: z.string().trim().toUpperCase().regex(/^[A-Z0-9_-]{2,20}$/, "Course code must be 2-20 characters and use only letters, numbers, underscore, or hyphen"),
             program_level: normalizedTextSchema("Program level", 2, 50).optional().nullable()
@@ -27,7 +29,7 @@ export const courseSchemas = {
         }),
         body: z.object({
             course_name: normalizedTextSchema("Course name").optional(),
-            duration: z.coerce.number().int().min(1).max(10).optional(),
+            duration: durationSchema.optional(),
             department_id: z.coerce.number().int().positive().optional(),
             course_code: z.string().trim().toUpperCase().regex(/^[A-Z0-9_-]{2,20}$/, "Course code must be 2-20 characters and use only letters, numbers, underscore, or hyphen").optional(),
             program_level: normalizedTextSchema("Program level", 2, 50).optional().nullable()
