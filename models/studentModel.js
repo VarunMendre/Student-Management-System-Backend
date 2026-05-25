@@ -1,4 +1,5 @@
 import { pool } from "../config/db.js";
+import { normalizeAcademicYearLabel } from "../utils/receiptGenerator.js";
 
 const STUDENT_FILTER_COLUMNS = {
     department_id: "s.department_id",
@@ -60,12 +61,16 @@ const getEnrolledCount = async (batchId) => {
 
 const getBatchFeesByYear = async (batchId) => {
     const [rows] = await pool.query(
-        "SELECT component_name, amount FROM course_fees WHERE batch_id = ?",
+        `SELECT cf.component_name, cf.amount, c.duration
+         FROM course_fees cf
+         JOIN course_batches cb ON cf.batch_id = cb.id
+         JOIN courses c ON cb.course_id = c.id
+         WHERE cf.batch_id = ?`,
         [batchId]
     );
     const fees = {};
     rows.forEach(r => {
-        const year = r.component_name.split(' - ')[0]; // Extract "FY", "SY", etc.
+        const year = normalizeAcademicYearLabel(r.component_name.split(' - ')[0], r.duration);
         fees[year] = (fees[year] || 0) + parseFloat(r.amount);
     });
     return fees;

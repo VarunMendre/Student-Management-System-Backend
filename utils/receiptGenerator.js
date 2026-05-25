@@ -79,17 +79,62 @@ export const amountToWords = (amount) => {
 
 /**
  * Generate academic year labels based on course duration.
- * e.g., "4 Years" → ["FY", "SY", "TY", "Final Year"]
- *         "2 Years" → ["FY", "Final Year"]
+ * e.g., "4 Years" -> ["FY", "SY", "TY", "4Y"]
+ *       "5 Years" -> ["FY", "SY", "TY", "4Y", "5Y"]
  */
-export const getAcademicYearLabels = (duration) => {
-    const durationMap = {
-        "1 Year": ["FY"],
-        "2 Years": ["FY", "Final Year"],
-        "3 Years": ["FY", "SY", "TY"],
-        "4 Years": ["FY", "SY", "TY", "Final Year"],
-        "5 Years": ["FY", "SY", "TY", "Fourth Year", "Final Year"]
+const CANONICAL_YEAR_LABELS = ["FY", "SY", "TY", "4Y", "5Y"];
+
+const getYearCountFromDuration = (duration) => {
+    const yearCountMap = {
+        "1 Year": 1,
+        "2 Years": 2,
+        "3 Years": 3,
+        "4 Years": 4,
+        "5 Years": 5
     };
 
-    return durationMap[duration] || ["FY"];
+    return yearCountMap[duration] || 1;
+};
+
+export const normalizeAcademicYearLabel = (label, duration = null) => {
+    const normalized = String(label || "").trim().toUpperCase().replace(/\s+/g, " ");
+    const finalYearLabel = CANONICAL_YEAR_LABELS[getYearCountFromDuration(duration) - 1] || "FY";
+    const aliasMap = {
+        "FY": "FY",
+        "FIRST YEAR": "FY",
+        "SY": "SY",
+        "SECOND YEAR": "SY",
+        "TY": "TY",
+        "THIRD YEAR": "TY",
+        "4Y": "4Y",
+        "Y4": "4Y",
+        "4TH YEAR": "4Y",
+        "FOURTH YEAR": "4Y",
+        "5Y": "5Y",
+        "Y5": "5Y",
+        "5TH YEAR": "5Y",
+        "FIFTH YEAR": "5Y"
+    };
+
+    if (normalized === "FINAL YEAR") {
+        return finalYearLabel;
+    }
+
+    return aliasMap[normalized] || label;
+};
+
+export const normalizeFeeComponentName = (componentName, duration = null) => {
+    const [rawYearLabel, ...rest] = String(componentName || "").split(" - ");
+    const normalizedYearLabel = normalizeAcademicYearLabel(rawYearLabel, duration);
+
+    if (!rest.length) {
+        return normalizedYearLabel;
+    }
+
+    return `${normalizedYearLabel} - ${rest.join(" - ")}`;
+};
+
+export const getAcademicYearLabels = (duration) => {
+    const yearCount = getYearCountFromDuration(duration);
+    return CANONICAL_YEAR_LABELS.slice(0, yearCount);
 };

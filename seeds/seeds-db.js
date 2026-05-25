@@ -6,6 +6,29 @@ import { pool } from "../config/db.js";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+const stripLeadingSqlComments = (query) => {
+  const lines = String(query || "").split("\n");
+  let firstStatementLineIndex = 0;
+
+  while (firstStatementLineIndex < lines.length) {
+    const line = lines[firstStatementLineIndex].trim();
+
+    if (!line || line.startsWith("--")) {
+      firstStatementLineIndex += 1;
+      continue;
+    }
+
+    break;
+  }
+
+  return lines.slice(firstStatementLineIndex).join("\n").trim();
+};
+
+const isDuplicateIndexError = (error, query) => {
+  const normalizedQuery = stripLeadingSqlComments(query).toUpperCase();
+  return normalizedQuery.startsWith("CREATE INDEX") && error?.code === "ER_DUP_KEYNAME";
+};
+
 const initializeDatabase = async () => {
   try {
     console.log("Reading schema.sql...");
@@ -27,6 +50,11 @@ const initializeDatabase = async () => {
             try {
                 await connection.query(queries[i]);
             } catch (queryErr) {
+                if (isDuplicateIndexError(queryErr, queries[i])) {
+                    console.warn(`Skipping existing index in query #${i + 1}`);
+                    continue;
+                }
+
                 console.error(`Error in query #${i + 1}:`, queries[i]);
                 throw queryErr;
             }

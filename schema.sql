@@ -83,6 +83,12 @@ CREATE TABLE IF NOT EXISTS app_users (
 );
 
 -- Student Fee Ledger (One row per academic year per student)
+-- Canonical academic year labels used by the app:
+-- 1 Year: FY
+-- 2 Years: FY, SY
+-- 3 Years: FY, SY, TY
+-- 4 Years: FY, SY, TY, 4Y
+-- 5 Years: FY, SY, TY, 4Y, 5Y
 CREATE TABLE IF NOT EXISTS student_fee_ledger (
     id                  INT AUTO_INCREMENT PRIMARY KEY,
     student_id          INTEGER NOT NULL,
@@ -232,3 +238,19 @@ CREATE INDEX idx_sch_app_submitted ON scholarship_applications(submitted_at);
 CREATE INDEX idx_sch_audit_application ON scholarship_audit_logs(application_id);
 CREATE INDEX idx_sch_audit_created ON scholarship_audit_logs(created_at);
 CREATE INDEX idx_sch_ocr_jobs_status ON scholarship_ocr_jobs(status, available_at);
+
+-- Optional cleanup for legacy fee-component labels:
+-- UPDATE course_fees SET component_name = REPLACE(component_name, 'Y4 - ', '4Y - ') WHERE component_name LIKE 'Y4 - %';
+-- UPDATE course_fees SET component_name = REPLACE(component_name, 'Y5 - ', '5Y - ') WHERE component_name LIKE 'Y5 - %';
+-- UPDATE course_fees SET component_name = REPLACE(component_name, 'Fourth Year - ', '4Y - ') WHERE component_name LIKE 'Fourth Year - %';
+-- UPDATE course_fees SET component_name = REPLACE(component_name, 'Fifth Year - ', '5Y - ') WHERE component_name LIKE 'Fifth Year - %';
+-- UPDATE course_fees cf
+-- JOIN course_batches cb ON cf.batch_id = cb.id
+-- JOIN courses c ON cb.course_id = c.id
+-- SET cf.component_name = REPLACE(cf.component_name, 'Final Year - ', '4Y - ')
+-- WHERE cf.component_name LIKE 'Final Year - %' AND c.duration = '4 Years';
+-- UPDATE course_fees cf
+-- JOIN course_batches cb ON cf.batch_id = cb.id
+-- JOIN courses c ON cb.course_id = c.id
+-- SET cf.component_name = REPLACE(cf.component_name, 'Final Year - ', '5Y - ')
+-- WHERE cf.component_name LIKE 'Final Year - %' AND c.duration = '5 Years';

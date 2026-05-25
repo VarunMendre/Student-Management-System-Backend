@@ -22,7 +22,13 @@ const insertFee = async (connection, batchId, component_name, amount) => {
 };
 
 const findBatchById = async (batchId) => {
-    const [rows] = await pool.query("SELECT * FROM course_batches WHERE id = ?", [batchId]);
+    const [rows] = await pool.query(
+        `SELECT cb.*, c.duration
+         FROM course_batches cb
+         JOIN courses c ON cb.course_id = c.id
+         WHERE cb.id = ?`,
+        [batchId]
+    );
     return rows[0];
 };
 
