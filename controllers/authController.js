@@ -8,17 +8,22 @@ export const login = asyncHandler(async (req, res) => {
     res.cookie("refreshToken", refreshToken, authService.getRefreshCookieOptions());
     successResponse(res, {
         user,
-        accessToken
+        accessToken,
+        refreshToken
     }, "Login successful");
 });
 
 export const refresh = asyncHandler(async (req, res) => {
-    const { accessToken, refreshToken, user } = await authService.refreshSession(req.cookies?.refreshToken);
+    // Accept refresh token from request body (cross-origin) or cookie (same-origin fallback)
+    const incomingRefreshToken = req.body?.refreshToken || req.cookies?.refreshToken;
+
+    const { accessToken, refreshToken, user } = await authService.refreshSession(incomingRefreshToken);
 
     res.cookie("refreshToken", refreshToken, authService.getRefreshCookieOptions());
 
     successResponse(res, {
         accessToken,
+        refreshToken,
         user
     }, "Token refreshed successfully");
 });
