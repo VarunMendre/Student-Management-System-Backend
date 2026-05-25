@@ -132,10 +132,16 @@ const listStudents = async (filters = {}) => {
     const safeLimit = parsePaginationValue(filters.limit, 10);
     const offset = (safePage - 1) * safeLimit;
 
-    const [rows, total] = await Promise.all([
+    const [initialRows, total] = await Promise.all([
         studentModel.findStudents(filters, { limit: safeLimit, offset }),
         studentModel.countStudents(filters)
     ]);
+
+    await Promise.all(
+        initialRows.map((row) => studentModel.syncLedgerFeesFromBatch(row.id))
+    );
+
+    const rows = await studentModel.findStudents(filters, { limit: safeLimit, offset });
 
     return {
         data: rows.map((row) => ({
@@ -315,6 +321,12 @@ const bulkImportStudents = async (data) => {
 };
 
 const getFeeLedgerReport = async (filters = {}) => {
+    const initialRows = await studentModel.getFeeLedgerReport(filters);
+
+    await Promise.all(
+        initialRows.map((row) => studentModel.syncLedgerFeesFromBatch(row.id))
+    );
+
     const rows = await studentModel.getFeeLedgerReport(filters);
 
     return rows.map((row) => ({

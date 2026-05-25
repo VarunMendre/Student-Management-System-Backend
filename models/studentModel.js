@@ -1,5 +1,5 @@
 import { pool } from "../config/db.js";
-import { normalizeAcademicYearLabel } from "../utils/receiptGenerator.js";
+import { getAcademicYearLabels, normalizeAcademicYearLabel } from "../utils/receiptGenerator.js";
 
 const STUDENT_FILTER_COLUMNS = {
     department_id: "s.department_id",
@@ -200,12 +200,16 @@ const syncLedgerFeesFromBatch = async (studentId) => {
         `SELECT
             s.id AS student_id,
             s.batch_id,
+            c.duration,
             sfl.id AS ledger_id,
             sfl.academic_year,
+            sfl.academic_year_num,
             sfl.total_yearly_fee,
             sfl.total_paid,
             sfl.pending_fee
          FROM students s
+         JOIN course_batches cb ON cb.id = s.batch_id
+         JOIN courses c ON c.id = cb.course_id
          JOIN student_fee_ledger sfl ON sfl.student_id = s.id
          WHERE s.id = ?`,
         [studentId]
@@ -216,37 +220,61 @@ const syncLedgerFeesFromBatch = async (studentId) => {
     }
 
     const batchId = rows[0].batch_id;
+    const duration = rows[0].duration;
     const batchFees = await getBatchFeesByYear(batchId);
+    const canonicalYearLabels = getAcademicYearLabels(duration);
+    const existingByYearNum = new Map(rows.map((row) => [Number(row.academic_year_num), row]));
 
     const updates = rows
         .map((row) => {
-            const targetFee = Number(batchFees[row.academic_year] || 0);
+            const yearIndex = Number(row.academic_year_num) - 1;
+            const canonicalAcademicYear = canonicalYearLabels[yearIndex] || normalizeAcademicYearLabel(row.academic_year, duration);
+            const targetFee = Number(batchFees[canonicalAcademicYear] || batchFees[row.academic_year] || 0);
             const currentFee = Number(row.total_yearly_fee || 0);
             const totalPaid = Number(row.total_paid || 0);
             const currentPending = Number(row.pending_fee || 0);
 
-            if (targetFee <= 0 || currentFee === targetFee) {
+            if (targetFee <= 0 && row.academic_year === canonicalAcademicYear) {
                 return null;
             }
 
-            if (currentFee > 0 && totalPaid > 0) {
+            if (currentFee > 0 && totalPaid > 0 && row.academic_year === canonicalAcademicYear && currentFee === targetFee) {
                 return null;
             }
 
             const nextPending = Math.max(0, targetFee - totalPaid);
-            if (currentFee === targetFee && currentPending === nextPending) {
+            if (row.academic_year === canonicalAcademicYear && currentFee === targetFee && currentPending === nextPending) {
                 return null;
             }
 
             return {
                 ledgerId: row.ledger_id,
+                academicYear: canonicalAcademicYear,
+                academicYearNum: Number(row.academic_year_num),
                 totalYearlyFee: targetFee,
                 pendingFee: nextPending
             };
         })
         .filter(Boolean);
 
-    if (!updates.length) {
+    const inserts = canonicalYearLabels
+        .map((academicYear, index) => {
+            const academicYearNum = index + 1;
+            if (existingByYearNum.has(academicYearNum)) {
+                return null;
+            }
+
+            const totalYearlyFee = Number(batchFees[academicYear] || 0);
+            return {
+                academicYear,
+                academicYearNum,
+                totalYearlyFee,
+                pendingFee: totalYearlyFee
+            };
+        })
+        .filter(Boolean);
+
+    if (!updates.length && !inserts.length) {
         return;
     }
 
@@ -254,12 +282,31 @@ const syncLedgerFeesFromBatch = async (studentId) => {
         updates.map((update) =>
             pool.query(
                 `UPDATE student_fee_ledger
-                 SET total_yearly_fee = ?, pending_fee = ?
+                 SET academic_year = ?, total_yearly_fee = ?, pending_fee = ?
                  WHERE id = ?`,
-                [update.totalYearlyFee, update.pendingFee, update.ledgerId]
+                [update.academicYear, update.totalYearlyFee, update.pendingFee, update.ledgerId]
             )
         )
     );
+
+    if (inserts.length) {
+        await Promise.all(
+            inserts.map((entry) =>
+                pool.query(
+                    `INSERT INTO student_fee_ledger (student_id, academic_year, academic_year_num, total_yearly_fee, total_paid, pending_fee, status)
+                     VALUES (?, ?, ?, ?, 0, ?, ?)`,
+                    [
+                        studentId,
+                        entry.academicYear,
+                        entry.academicYearNum,
+                        entry.totalYearlyFee,
+                        entry.pendingFee,
+                        entry.totalYearlyFee > 0 ? "Pending" : "Paid"
+                    ]
+                )
+            )
+        );
+    }
 };
 
 const getRecentTransactionsByStudent = async (studentId, limit = 20) => {
