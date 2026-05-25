@@ -195,6 +195,73 @@ const getLedgerByStudent = async (studentId) => {
     return rows;
 };
 
+const syncLedgerFeesFromBatch = async (studentId) => {
+    const [rows] = await pool.query(
+        `SELECT
+            s.id AS student_id,
+            s.batch_id,
+            sfl.id AS ledger_id,
+            sfl.academic_year,
+            sfl.total_yearly_fee,
+            sfl.total_paid,
+            sfl.pending_fee
+         FROM students s
+         JOIN student_fee_ledger sfl ON sfl.student_id = s.id
+         WHERE s.id = ?`,
+        [studentId]
+    );
+
+    if (!rows.length) {
+        return;
+    }
+
+    const batchId = rows[0].batch_id;
+    const batchFees = await getBatchFeesByYear(batchId);
+
+    const updates = rows
+        .map((row) => {
+            const targetFee = Number(batchFees[row.academic_year] || 0);
+            const currentFee = Number(row.total_yearly_fee || 0);
+            const totalPaid = Number(row.total_paid || 0);
+            const currentPending = Number(row.pending_fee || 0);
+
+            if (targetFee <= 0 || currentFee === targetFee) {
+                return null;
+            }
+
+            if (currentFee > 0 && totalPaid > 0) {
+                return null;
+            }
+
+            const nextPending = Math.max(0, targetFee - totalPaid);
+            if (currentFee === targetFee && currentPending === nextPending) {
+                return null;
+            }
+
+            return {
+                ledgerId: row.ledger_id,
+                totalYearlyFee: targetFee,
+                pendingFee: nextPending
+            };
+        })
+        .filter(Boolean);
+
+    if (!updates.length) {
+        return;
+    }
+
+    await Promise.all(
+        updates.map((update) =>
+            pool.query(
+                `UPDATE student_fee_ledger
+                 SET total_yearly_fee = ?, pending_fee = ?
+                 WHERE id = ?`,
+                [update.totalYearlyFee, update.pendingFee, update.ledgerId]
+            )
+        )
+    );
+};
+
 const getRecentTransactionsByStudent = async (studentId, limit = 20) => {
     const [rows] = await pool.query(
         `SELECT ft.id, ft.amount_paid, ft.payment_mode, ft.payment_reference, ft.receipt_number,
@@ -403,6 +470,7 @@ export default {
     countAll,
     findByIdWithDetails,
     getLedgerByStudent,
+    syncLedgerFeesFromBatch,
     getRecentTransactionsByStudent,
     exists,
     update,

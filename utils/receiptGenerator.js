@@ -85,15 +85,29 @@ export const amountToWords = (amount) => {
 const CANONICAL_YEAR_LABELS = ["FY", "SY", "TY", "4Y", "5Y"];
 
 const getYearCountFromDuration = (duration) => {
+    if (typeof duration === "number" && Number.isFinite(duration)) {
+        const normalized = Math.trunc(duration);
+        return normalized > 0 ? normalized : 1;
+    }
+
+    const raw = String(duration ?? "").trim();
+    if (!raw) return 1;
+
+    const matched = raw.match(/^(\d{1,2})\s*(?:Y|YEAR|YEARS)?$/i);
+    if (matched) {
+        const normalized = Number.parseInt(matched[1], 10);
+        return Number.isFinite(normalized) && normalized > 0 ? normalized : 1;
+    }
+
     const yearCountMap = {
-        "1 Year": 1,
-        "2 Years": 2,
-        "3 Years": 3,
-        "4 Years": 4,
-        "5 Years": 5
+        "1 YEAR": 1,
+        "2 YEARS": 2,
+        "3 YEARS": 3,
+        "4 YEARS": 4,
+        "5 YEARS": 5
     };
 
-    return yearCountMap[duration] || 1;
+    return yearCountMap[raw.toUpperCase()] || 1;
 };
 
 export const normalizeAcademicYearLabel = (label, duration = null) => {

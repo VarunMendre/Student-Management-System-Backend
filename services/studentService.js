@@ -158,6 +158,7 @@ const listStudents = async (filters = {}) => {
 };
 
 const getStudentById = async (id) => {
+    await studentModel.syncLedgerFeesFromBatch(id);
     const student = await studentModel.findByIdWithDetails(id);
     if (!student) throw new CustomError({
         message: "Student not found",
