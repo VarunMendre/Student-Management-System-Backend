@@ -15,10 +15,22 @@ const deleteFeesByBatch = async (connection, batchId) => {
 };
 
 const insertFee = async (connection, batchId, normalized_year, component_name, amount) => {
-    await connection.query(
-        "INSERT INTO course_fees (batch_id, normalized_year, component_name, amount) VALUES (?, ?, ?, ?)",
-        [batchId, normalized_year, component_name, amount]
-    );
+    try {
+        await connection.query(
+            "INSERT INTO course_fees (batch_id, normalized_year, component_name, amount) VALUES (?, ?, ?, ?)",
+            [batchId, normalized_year, component_name, amount]
+        );
+    } catch (error) {
+        // Backward compatibility for databases where normalized_year column is not migrated yet.
+        if (error?.code === "ER_BAD_FIELD_ERROR" || String(error?.message || "").includes("Unknown column 'normalized_year'")) {
+            await connection.query(
+                "INSERT INTO course_fees (batch_id, component_name, amount) VALUES (?, ?, ?)",
+                [batchId, component_name, amount]
+            );
+            return;
+        }
+        throw error;
+    }
 };
 
 const findBatchById = async (batchId) => {

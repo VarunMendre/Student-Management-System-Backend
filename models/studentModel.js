@@ -1,6 +1,22 @@
 import { pool } from "../config/db.js";
 import { normalizeAcademicYearLabel } from "../utils/receiptGenerator.js";
 
+const safeParseJsonArray = (value) => {
+    if (value === null || value === undefined) return [];
+    if (Array.isArray(value)) return value;
+    if (typeof value === "object") return [];
+
+    const raw = String(value).trim();
+    if (!raw || raw.toLowerCase() === "null" || raw.toLowerCase() === "undefined") return [];
+
+    try {
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed : [];
+    } catch {
+        return [];
+    }
+};
+
 const STUDENT_FILTER_COLUMNS = {
     department_id: "s.department_id",
     course_id: "s.course_id",
@@ -121,12 +137,10 @@ const listAll = async (query, values, pagination = {}) => {
     const [rows] = await pool.query(finalQuery, params);
     
     // Parse JSON strings from MariaDB
-    return rows.map(row => {
-        if (row.fee_ledger && typeof row.fee_ledger === 'string') {
-            try { row.fee_ledger = JSON.parse(row.fee_ledger); } catch (e) { row.fee_ledger = []; }
-        }
-        return row;
-    });
+    return rows.map(row => ({
+        ...row,
+        fee_ledger: safeParseJsonArray(row.fee_ledger)
+    }));
 };
 
 const countAll = async (query, values) => {
@@ -178,8 +192,8 @@ const findByIdWithDetails = async (id) => {
         [id]
     );
     const student = rows[0];
-    if (student && student.fee_ledger && typeof student.fee_ledger === 'string') {
-        try { student.fee_ledger = JSON.parse(student.fee_ledger); } catch (e) { student.fee_ledger = []; }
+    if (student) {
+        student.fee_ledger = safeParseJsonArray(student.fee_ledger);
     }
     return student;
 };
@@ -334,12 +348,10 @@ const getFeeLedgerReport = async (filters = {}) => {
     const query = `${baseQuery}${whereClause} ORDER BY s.full_name ASC`;
     
     const [rows] = await pool.query(query, values);
-    return rows.map(row => {
-        if (row.fee_ledger && typeof row.fee_ledger === 'string') {
-            try { row.fee_ledger = JSON.parse(row.fee_ledger); } catch (e) { row.fee_ledger = []; }
-        }
-        return row;
-    });
+    return rows.map(row => ({
+        ...row,
+        fee_ledger: safeParseJsonArray(row.fee_ledger)
+    }));
 };
 
 const findStudents = async (filters = {}, pagination = {}) => {
