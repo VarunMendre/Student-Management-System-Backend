@@ -8,15 +8,12 @@ export const login = asyncHandler(async (req, res) => {
     res.cookie("refreshToken", refreshToken, authService.getRefreshCookieOptions());
     successResponse(res, {
         user,
-        accessToken,
-        refreshToken
+        accessToken
     }, "Login successful");
 });
 
 export const refresh = asyncHandler(async (req, res) => {
-    // Prefer the httpOnly cookie because it is the server-controlled source of truth.
-    // Fall back to the request body to support older frontend builds during rollout.
-    const incomingRefreshToken = req.cookies?.refreshToken || req.body?.refreshToken;
+    const incomingRefreshToken = req.cookies?.refreshToken;
 
     const { accessToken, refreshToken, user } = await authService.refreshSession(incomingRefreshToken);
 
@@ -24,7 +21,6 @@ export const refresh = asyncHandler(async (req, res) => {
 
     successResponse(res, {
         accessToken,
-        refreshToken,
         user
     }, "Token refreshed successfully");
 });

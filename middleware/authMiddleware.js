@@ -1,5 +1,6 @@
 import { verifyToken } from "../utils/jwtHelper.js";
 import { CustomError, ErrorCodes } from "../utils/customError.js";
+import { logSecurityEvent } from "../utils/securityLogger.js";
 
 const ensureAuthenticatedUser = (req) => {
     if (!req.user) {
@@ -29,6 +30,7 @@ export const verifyAccessToken = (req, res, next) => {
     const authHeader = req.headers.authorization;
 
     if (!authHeader?.startsWith("Bearer ")) {
+        logSecurityEvent("missing_access_token", req);
         throw new CustomError({
             message: "Unauthorized",
             statusCode: 401,
@@ -40,6 +42,7 @@ export const verifyAccessToken = (req, res, next) => {
     const decoded = verifyToken(token);
 
     if (!decoded || decoded.type !== "AccessToken") {
+        logSecurityEvent("invalid_access_token", req);
         throw new CustomError({
             message: "Invalid or expired access token",
             statusCode: 401,
@@ -61,6 +64,9 @@ export const authorizeRoles = (...roles) => (req, res, next) => {
     ensureAuthenticatedUser(req);
 
     if (!roles.includes(req.user.role)) {
+        logSecurityEvent("forbidden_role_access", req, {
+            requiredRoles: roles
+        });
         throw new CustomError({
             message: "Forbidden",
             statusCode: 403,
@@ -78,6 +84,10 @@ export const authorizeStudentOrRoles = (...roles) => (req, res, next) => {
         return next();
     }
 
+    logSecurityEvent("forbidden_role_access", req, {
+        requiredRoles: roles,
+        allowStudent: true
+    });
     throw new CustomError({
         message: "Forbidden",
         statusCode: 403,
@@ -93,6 +103,9 @@ export const requireStudentOwnership = (paramName = "id") => (req, res, next) =>
     }
 
     if (!req.user.student_id) {
+        logSecurityEvent("student_ownership_missing_mapping", req, {
+            paramName
+        });
         throw new CustomError({
             message: "Forbidden",
             statusCode: 403,
@@ -103,6 +116,10 @@ export const requireStudentOwnership = (paramName = "id") => (req, res, next) =>
     const requestedStudentId = parsePositiveInteger(req.params[paramName], "student id");
 
     if (requestedStudentId !== Number(req.user.student_id)) {
+        logSecurityEvent("student_ownership_violation", req, {
+            paramName,
+            requestedStudentId
+        });
         throw new CustomError({
             message: "Forbidden",
             statusCode: 403,

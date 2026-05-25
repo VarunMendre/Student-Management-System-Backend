@@ -14,6 +14,7 @@ const S3_FORCE_PATH_STYLE = String(process.env.S3_FORCE_PATH_STYLE || "false").t
 const S3_SIGNED_URL_EXPIRES_SECONDS = Number(process.env.S3_SIGNED_URL_EXPIRES_SECONDS || 900);
 
 const uploadsRoot = path.resolve(process.cwd(), "uploads");
+const PUBLIC_API_BASE_URL = String(process.env.PUBLIC_API_BASE_URL || "").trim().replace(/\/+$/, "");
 
 const ensureLocalUploadDir = () => {
     fs.mkdirSync(path.resolve(uploadsRoot, "scholarship-forms"), { recursive: true });
@@ -94,7 +95,7 @@ const deleteS3Object = async (storedPath) => {
     }));
 };
 
-const buildLocalAccessUrl = (storedPath, requestOrigin) => `${requestOrigin}${storedPath}`;
+const buildLocalAccessUrl = (storedPath, requestOrigin) => `${(PUBLIC_API_BASE_URL || requestOrigin || "").replace(/\/+$/, "")}${storedPath}`;
 
 const buildS3SignedAccessUrl = async (storedPath) => {
     const client = getS3Client();

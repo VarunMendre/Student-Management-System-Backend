@@ -1,7 +1,7 @@
 import scholarshipService from "../services/scholarshipService.js";
 import asyncHandler from "../utils/asyncHandler.js";
 import { successResponse } from "../utils/customResponse.js";
-import { CustomError, ErrorCodes } from "../utils/customError.js";
+import { assertScholarshipFileIsSafe } from "../middleware/uploadMiddleware.js";
 
 const getConfig = asyncHandler(async (req, res) => {
     const { courseId } = req.params;
@@ -17,17 +17,6 @@ const updateConfig = asyncHandler(async (req, res) => {
 
 const disburse = asyncHandler(async (req, res) => {
     const { disbursements } = req.body;
-    if (!Array.isArray(disbursements)) {
-        throw new CustomError({
-            message: "Invalid input",
-            statusCode: 400,
-            code: ErrorCodes.VALIDATION_ERROR,
-            details: {
-                field: "disbursements",
-                issue: "Expected an array"
-            }
-        });
-    }
     const results = await scholarshipService.disburseScholarshipBatch(disbursements, {
         actorUserId: req.user.userId,
         actorRole: req.user.role
@@ -54,6 +43,7 @@ const reverse = asyncHandler(async (req, res) => {
 });
 
 const submitApplication = asyncHandler(async (req, res) => {
+    assertScholarshipFileIsSafe(req.file);
     const { application_id } = req.body;
     const result = await scholarshipService.submitScholarshipApplication({
         actorUserId: req.user.userId,

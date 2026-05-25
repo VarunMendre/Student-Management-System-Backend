@@ -1,3 +1,4 @@
+import "dotenv/config";
 import express from "express";
 import cors from "cors";                          
 import cookieParser from "cookie-parser";
@@ -11,33 +12,38 @@ import transactionRoutes from "./routes/transactionRoutes.js";
 import authRoutes from "./routes/authRoutes.js";
 import userManagementRoutes from "./routes/userManagementRoutes.js";
 import { verifyAccessToken } from "./middleware/authMiddleware.js";
+import { rateLimiters } from "./config/securityConfig.js";
 import { CustomError, ErrorCodes } from "./utils/customError.js";
+import { securityHeaders } from "./middleware/appSecurityMiddleware.js";
 
 const app = express();
 const allowedOrigins = (process.env.FRONTEND_URL || "")
-    .split(",")
-    .map((origin) => origin.trim().replace(/\/+$/, ""))
-    .filter(Boolean);
+.split(",")
+.map((origin) => origin.trim().replace(/\/+$/, ""))
+.filter(Boolean);
 
 app.use(cors({
     origin: (origin, callback) => {
         if (!origin) {
             return callback(null, true);
         }
-
+        
         const normalizedOrigin = origin.replace(/\/+$/, "");
         if (allowedOrigins.length === 0 || allowedOrigins.includes(normalizedOrigin)) {
             return callback(null, true);
         }
-
+        
         return callback(new Error(`CORS blocked for origin: ${origin}`));
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization']
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-CSRF-Token']
 }));
 
-app.use(express.json());
+app.set("trust proxy", 1);
+app.disable("x-powered-by");
+app.use(securityHeaders);
+app.use(express.json({ limit: "200kb" }));
 app.use(cookieParser());
 app.use("/uploads", express.static(path.resolve(process.cwd(), "uploads")));
 app.use((req, res, next) => {
@@ -51,6 +57,7 @@ app.get("/", (req, res) => {
     res.send("MySQL + Express API is running Hello World!");
 });
 
+app.use("/api/v1", rateLimiters.globalApi);
 app.use("/api/v1/auth", authRoutes);
 app.use("/api/v1", verifyAccessToken);
 app.use("/api/v1/departments", departmentRoutes);
@@ -65,16 +72,27 @@ app.use("/api/v1/users", userManagementRoutes);
 app.use((err, req, res, next) => {
     const normalizedError = err instanceof CustomError
         ? err
-        : new CustomError({
-            message: "Internal Server Error",
-            statusCode: 500,
-            code: ErrorCodes.INTERNAL_ERROR,
-            isOperational: false,
-            cause: err,
-            details: process.env.NODE_ENV !== "production" && err?.message
-                ? { originalMessage: err.message }
-                : null
-        });
+        : err?.name === "MulterError"
+            ? new CustomError({
+                message: err.code === "LIMIT_FILE_SIZE"
+                    ? "Uploaded file is too large"
+                    : "Invalid upload request",
+                statusCode: 400,
+                code: ErrorCodes.VALIDATION_ERROR,
+                details: process.env.NODE_ENV !== "production" && err?.message
+                    ? { originalMessage: err.message, code: err.code || null }
+                    : null
+            })
+            : new CustomError({
+                message: "Internal Server Error",
+                statusCode: 500,
+                code: ErrorCodes.INTERNAL_ERROR,
+                isOperational: false,
+                cause: err,
+                details: process.env.NODE_ENV !== "production" && err?.message
+                    ? { originalMessage: err.message }
+                    : null
+            });
 
     const statusCode = normalizedError.statusCode || 500;
     const timestamp = normalizedError.timestamp || new Date().toISOString();

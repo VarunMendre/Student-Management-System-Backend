@@ -16,8 +16,12 @@ export const pool = mysql.createPool({
   password: String(process.env.MYSQL_PASSWORD || ""),
   database: process.env.MYSQL_DB,
   waitForConnections: true,
-  connectionLimit: 90000,
-  queueLimit: 0,
+  connectionLimit: Number(process.env.DB_CONNECTION_LIMIT || 20),
+  maxIdle: Number(process.env.DB_MAX_IDLE || 10),
+  idleTimeout: Number(process.env.DB_IDLE_TIMEOUT_MS || 60000),
+  queueLimit: Number(process.env.DB_QUEUE_LIMIT || 100),
+  enableKeepAlive: true,
+  keepAliveInitialDelay: 0,
 });
 
 // Test the connection

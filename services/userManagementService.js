@@ -1,11 +1,12 @@
 import bcrypt from "bcryptjs";
+import crypto from "crypto";
 import userModel from "../models/userModel.js";
 import { CustomError, ErrorCodes } from "../utils/customError.js";
 
 const CREATABLE_STAFF_ROLES = ["accountant", "admin"];
 const EDITABLE_ROLES = ["accountant", "admin"];
 
-const buildDefaultPassword = (contactNumber) => `${contactNumber}`;
+const generateTemporaryPassword = () => crypto.randomBytes(12).toString("base64url");
 
 const validateUserId = (userId) => {
     const parsedUserId = Number(userId);
@@ -72,15 +73,21 @@ const createUser = async ({ name, email, contact_number, role }) => {
         });
     }
 
-    const hashedPassword = await bcrypt.hash(buildDefaultPassword(contact_number), 12);
+    const temporaryPassword = generateTemporaryPassword();
+    const hashedPassword = await bcrypt.hash(temporaryPassword, 12);
 
-    return userModel.createUser({
+    const createdUser = await userModel.createUser({
         name,
         email,
         password: hashedPassword,
         contact_number,
         role
     });
+
+    return {
+        ...createdUser,
+        temporary_password: temporaryPassword
+    };
 };
 
 const updateUserRole = async (userId, role) => {

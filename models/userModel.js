@@ -154,6 +154,7 @@ const updatePassword = async (id, hashedPassword) => {
     await pool.query(
         `UPDATE app_users
          SET password = ?,
+             refresh_token = NULL,
              is_password_changed = TRUE,
              updated_at = CURRENT_TIMESTAMP
          WHERE id = ?`,

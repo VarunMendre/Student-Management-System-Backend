@@ -88,7 +88,7 @@ const loginUser = async ({ email, password, role }) => {
 
     if (!user) {
         throw new CustomError({
-            message: "No account found for this email address",
+            message: "Invalid email, password, or role",
             statusCode: 401,
             code: ErrorCodes.UNAUTHORIZED
         });
@@ -96,7 +96,7 @@ const loginUser = async ({ email, password, role }) => {
 
     if (user.role !== role) {
         throw new CustomError({
-            message: `This account is registered as ${user.role}, not ${role}`,
+            message: "Invalid email, password, or role",
             statusCode: 401,
             code: ErrorCodes.UNAUTHORIZED
         });
@@ -114,7 +114,7 @@ const loginUser = async ({ email, password, role }) => {
 
     if (!isPasswordValid) {
         throw new CustomError({
-            message: "Password is incorrect",
+            message: "Invalid email, password, or role",
             statusCode: 401,
             code: ErrorCodes.UNAUTHORIZED
         });
@@ -268,9 +268,17 @@ const resetUserPassword = async (userId, { currentPassword, newPassword }) => {
         });
     }
 
-    if (newPassword.length < 8) {
+    if (newPassword.length < 12) {
         throw new CustomError({
-            message: "New password must be at least 8 characters long",
+            message: "New password must be at least 12 characters long",
+            statusCode: 400,
+            code: ErrorCodes.VALIDATION_ERROR
+        });
+    }
+
+    if (!/[A-Z]/.test(newPassword) || !/[a-z]/.test(newPassword) || !/[0-9]/.test(newPassword) || !/[^A-Za-z0-9]/.test(newPassword)) {
+        throw new CustomError({
+            message: "New password must include uppercase, lowercase, number, and special character",
             statusCode: 400,
             code: ErrorCodes.VALIDATION_ERROR
         });
