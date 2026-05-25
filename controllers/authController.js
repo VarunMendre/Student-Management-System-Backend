@@ -14,8 +14,9 @@ export const login = asyncHandler(async (req, res) => {
 });
 
 export const refresh = asyncHandler(async (req, res) => {
-    // Accept refresh token from request body (cross-origin) or cookie (same-origin fallback)
-    const incomingRefreshToken = req.body?.refreshToken || req.cookies?.refreshToken;
+    // Prefer the httpOnly cookie because it is the server-controlled source of truth.
+    // Fall back to the request body to support older frontend builds during rollout.
+    const incomingRefreshToken = req.cookies?.refreshToken || req.body?.refreshToken;
 
     const { accessToken, refreshToken, user } = await authService.refreshSession(incomingRefreshToken);
 
