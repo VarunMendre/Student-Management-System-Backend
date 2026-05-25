@@ -26,7 +26,7 @@ export const batchSchemas = {
         body: z.object({
             components: z.array(z.object({
                 component_name: z.string().regex(componentNameRegex, "Invalid component name format"),
-                amount: z.number().positive().or(z.string().regex(amountRegex).transform(val => parseFloat(val)))
+                amount: z.number().nonnegative().or(z.string().regex(amountRegex).transform(val => parseFloat(val)))
             })).min(1, "At least one fee component is required")
         })
     }),

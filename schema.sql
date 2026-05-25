@@ -37,9 +37,11 @@ CREATE TABLE IF NOT EXISTS course_batches (
 CREATE TABLE IF NOT EXISTS course_fees (
     id INT AUTO_INCREMENT PRIMARY KEY,
     batch_id INTEGER,
+    normalized_year VARCHAR(20) NOT NULL,
     component_name VARCHAR(100) NOT NULL, 
-    amount DECIMAL(10, 2) NOT NULL,       
+    amount DECIMAL(10, 2) NOT NULL CHECK (amount >= 0),       
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(batch_id, normalized_year, component_name),
     FOREIGN KEY (batch_id) REFERENCES course_batches(id) ON DELETE CASCADE
 );
 
@@ -94,8 +96,8 @@ CREATE TABLE IF NOT EXISTS student_fee_ledger (
     student_id          INTEGER NOT NULL,
     academic_year       VARCHAR(20) NOT NULL,
     academic_year_num   INTEGER NOT NULL,
-    total_yearly_fee    DECIMAL(10,2) NOT NULL,
-    total_paid          DECIMAL(10,2) DEFAULT 0.00,
+    total_yearly_fee    DECIMAL(10,2) NOT NULL CHECK (total_yearly_fee >= 0),
+    total_paid          DECIMAL(10,2) DEFAULT 0.00 CHECK (total_paid >= 0),
     pending_fee         DECIMAL(10,2) AS (total_yearly_fee - total_paid) STORED,
     status              ENUM('Pending', 'Partial', 'Paid') DEFAULT 'Pending',
     created_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -109,7 +111,7 @@ CREATE TABLE IF NOT EXISTS fee_transactions (
     id                  INT AUTO_INCREMENT PRIMARY KEY,
     student_id          INTEGER NOT NULL,
     ledger_id           INTEGER NOT NULL,
-    amount_paid         DECIMAL(10,2) NOT NULL,
+    amount_paid         DECIMAL(10,2) NOT NULL CHECK (amount_paid >= 0),
     payment_mode        ENUM('Cash', 'UPI', 'Bank Transfer', 'Cheque', 'DD', 'Online', 'Scholarship') NOT NULL,
     payment_reference   VARCHAR(100) DEFAULT NULL,
     receipt_number      VARCHAR(50) UNIQUE NOT NULL,

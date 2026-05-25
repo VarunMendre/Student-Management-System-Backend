@@ -246,11 +246,11 @@ const getFeeLedgerReport = async (filters = {}) => {
             (
                 SELECT JSON_QUERY(CONCAT('[', GROUP_CONCAT(
                     JSON_OBJECT(
-                        'year_num', academic_year_num,
-                        'year_label', academic_year,
-                        'pending', pending_fee,
-                        'paid', total_paid,
-                        'total', total_yearly_fee
+                        'academic_year', academic_year,
+                        'academic_year_num', academic_year_num,
+                        'pending_fee', pending_fee,
+                        'total_paid', total_paid,
+                        'total_yearly_fee', total_yearly_fee
                     )
                     ORDER BY academic_year_num ASC
                 ), ']'), '$')

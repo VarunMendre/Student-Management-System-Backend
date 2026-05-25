@@ -1,6 +1,7 @@
 import batchModel from "../models/batchModel.js";
 import { withTransaction } from "../utils/dbUtils.js";
-import { normalizeFeeComponentName } from "../utils/receiptGenerator.js";
+import { getAcademicYearLabels, normalizeAcademicYearLabel, normalizeFeeComponentName } from "../utils/receiptGenerator.js";
+import { CustomError, ErrorCodes } from "../utils/customError.js";
 
 const createBatch = async (batchData) => batchModel.create(batchData);
 
@@ -9,15 +10,28 @@ const updateBatchFees = async (batchId, components) => {
         const batch = await batchModel.findBatchById(batchId);
 
         await batchModel.deleteFeesByBatch(client, batchId);
+        const validYears = getAcademicYearLabels(batch?.duration);
         await Promise.all(
-            components.map((component) =>
-                batchModel.insertFee(
+            components.map((component) => {
+                const normalizedComponentName = normalizeFeeComponentName(component.component_name, batch?.duration);
+                const normalizedYear = normalizeAcademicYearLabel(normalizedComponentName.split(" - ")[0], batch?.duration);
+
+                if (!validYears.includes(normalizedYear)) {
+                    throw new CustomError({
+                        message: `Invalid academic year '${normalizedYear}' for course duration '${batch?.duration}'`,
+                        statusCode: 400,
+                        code: ErrorCodes.VALIDATION_ERROR
+                    });
+                }
+
+                return batchModel.insertFee(
                     client,
                     batchId,
-                    normalizeFeeComponentName(component.component_name, batch?.duration),
+                    normalizedYear,
+                    normalizedComponentName,
                     component.amount
-                )
-            )
+                );
+            })
         );
 
         return { success: true };

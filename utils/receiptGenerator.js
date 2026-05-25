@@ -108,10 +108,16 @@ export const normalizeAcademicYearLabel = (label, duration = null) => {
         "THIRD YEAR": "TY",
         "4Y": "4Y",
         "Y4": "4Y",
+        "YEAR 4": "4Y",
+        "4TH": "4Y",
+        "FOURTH": "4Y",
         "4TH YEAR": "4Y",
         "FOURTH YEAR": "4Y",
         "5Y": "5Y",
         "Y5": "5Y",
+        "YEAR 5": "5Y",
+        "5TH": "5Y",
+        "FIFTH": "5Y",
         "5TH YEAR": "5Y",
         "FIFTH YEAR": "5Y"
     };

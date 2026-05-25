@@ -14,10 +14,10 @@ const deleteFeesByBatch = async (connection, batchId) => {
     await connection.query("DELETE FROM course_fees WHERE batch_id = ?", [batchId]);
 };
 
-const insertFee = async (connection, batchId, component_name, amount) => {
+const insertFee = async (connection, batchId, normalized_year, component_name, amount) => {
     await connection.query(
-        "INSERT INTO course_fees (batch_id, component_name, amount) VALUES (?, ?, ?)",
-        [batchId, component_name, amount]
+        "INSERT INTO course_fees (batch_id, normalized_year, component_name, amount) VALUES (?, ?, ?, ?)",
+        [batchId, normalized_year, component_name, amount]
     );
 };
 
