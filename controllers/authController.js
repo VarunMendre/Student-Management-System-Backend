@@ -5,6 +5,7 @@ import { successResponse } from "../utils/customResponse.js";
 export const login = asyncHandler(async (req, res) => {
     const { accessToken, refreshToken, user } = await authService.loginUser(req.body);
 
+    res.setHeader("Cache-Control", "no-store");
     res.cookie("refreshToken", refreshToken, authService.getRefreshCookieOptions());
     successResponse(res, {
         user,
@@ -13,10 +14,12 @@ export const login = asyncHandler(async (req, res) => {
 });
 
 export const refresh = asyncHandler(async (req, res) => {
-    const incomingRefreshToken = req.cookies?.refreshToken;
+    // Primary: HttpOnly refresh cookie. Fallback: explicit token in body (useful for non-browser clients).
+    const incomingRefreshToken = req.cookies?.refreshToken || req.body?.refreshToken;
 
     const { accessToken, refreshToken, user } = await authService.refreshSession(incomingRefreshToken);
 
+    res.setHeader("Cache-Control", "no-store");
     res.cookie("refreshToken", refreshToken, authService.getRefreshCookieOptions());
 
     successResponse(res, {

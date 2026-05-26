@@ -17,7 +17,9 @@ export const securityHeaders = (req, res, next) => {
     res.setHeader("Referrer-Policy", "no-referrer");
     res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
     res.setHeader("Cross-Origin-Opener-Policy", "same-origin");
-    res.setHeader("Cross-Origin-Resource-Policy", "same-site");
+    // This API is consumed cross-site (frontend and API are on different domains).
+    // Setting CORP to same-site can cause browsers to block cross-site fetch/XHR in some cases.
+    res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
     res.setHeader("Cache-Control", "no-store");
 
     next();
