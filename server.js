@@ -17,12 +17,12 @@ import { CustomError, ErrorCodes } from "./utils/customError.js";
 import { securityHeaders } from "./middleware/appSecurityMiddleware.js";
 
 const app = express();
-const allowedOrigins = (process.env.FRONTEND_URL || "")
-.split(",")
-.map((origin) => origin.trim().replace(/\/+$/, ""))
-.filter(Boolean);
+const allowedOrigins = (process.env.FRONTEND_URL || "http://localhost:5173/")
+  .split(",")
+  .map((origin) => origin.trim().replace(/\/+$/, ""))
+  .filter(Boolean);
 
-app.use(cors({
+const corsOptions = {
     origin: (origin, callback) => {
         if (!origin) {
             return callback(null, true);
@@ -37,8 +37,12 @@ app.use(cors({
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-CSRF-Token']
-}));
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-CSRF-Token'],
+    optionsSuccessStatus: 204,
+};
+
+app.use(cors(corsOptions));
+app.options(/.*/, cors(corsOptions));
 
 app.set("trust proxy", 1);
 app.disable("x-powered-by");
