@@ -507,6 +507,23 @@ const markApplicationConflict = async (connection, applicationRecordId, actorUse
     return rows[0] || null;
 };
 
+const getStudentOverCollectionBalance = async (connection, studentId) => {
+    const [rows] = await connection.query(`
+        SELECT COALESCE(SUM(amount), 0) AS balance
+        FROM student_over_collection
+        WHERE student_id = ? AND is_refunded = FALSE
+    `, [studentId]);
+    return parseFloat(rows[0]?.balance || 0);
+};
+
+const insertOverCollection = async (connection, { studentId, fromYearNum, carryToYearNum, amount, sourceTxnId = null }) => {
+    await connection.query(`
+        INSERT INTO student_over_collection (
+            student_id, from_academic_year_num, carried_to_academic_year_num, source, source_txn_id, amount
+        ) VALUES (?, ?, ?, 'Scholarship', ?, ?)
+    `, [studentId, fromYearNum, carryToYearNum, sourceTxnId, amount]);
+};
+
 export default {
     getConfigByCourse,
     upsertConfig,
@@ -540,5 +557,7 @@ export default {
     getPendingApplicationsByCycle,
     getApplicationsByIdsAndCycle,
     markApplicationApproved,
-    markApplicationConflict
+    markApplicationConflict,
+    getStudentOverCollectionBalance,
+    insertOverCollection
 };

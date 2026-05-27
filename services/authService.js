@@ -21,6 +21,7 @@ const COOKIE_SECURE = process.env.COOKIE_SECURE
     ? String(process.env.COOKIE_SECURE).trim().toLowerCase() === "true"
     : (COOKIE_SAME_SITE === "none" || IS_HTTPS_FRONTEND);
 const COOKIE_DOMAIN = process.env.COOKIE_DOMAIN || undefined;
+let didLogCookieConfig = false;
 
 const getRefreshCookieOptions = () => {
     const options = {
@@ -33,6 +34,18 @@ const getRefreshCookieOptions = () => {
 
     if (COOKIE_DOMAIN) {
         options.domain = COOKIE_DOMAIN;
+    }
+
+    if (!didLogCookieConfig && String(process.env.DEBUG_AUTH_COOKIE || "").toLowerCase() === "true") {
+        didLogCookieConfig = true;
+        // Avoid logging secrets. This prints only the flags that affect cookie send/receive behavior.
+        console.log("[auth] refresh cookie config", {
+            COOKIE_SAME_SITE,
+            COOKIE_SECURE,
+            COOKIE_DOMAIN: COOKIE_DOMAIN || null,
+            FRONTEND_URL: (process.env.FRONTEND_URL || "").split(",").map((v) => v.trim()).filter(Boolean),
+            computed: options
+        });
     }
 
     return options;
