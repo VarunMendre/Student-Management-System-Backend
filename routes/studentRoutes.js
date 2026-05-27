@@ -1,6 +1,6 @@
 import express from "express";
 import { enrollStudent, listStudents, getStudent, getStudentMetadata, updateStudent, bulkImportStudents, getFeeLedgerReport } from "../controllers/studentController.js";
-import { createPayment, getTransactions, getTransactionById, getFeeLedger } from "../controllers/paymentController.js";
+import { createPayment, getTransactions, getTransactionById, getFeeLedger, getStudentFeeOverview, getOverCollectionHistory } from "../controllers/paymentController.js";
 import { authorizeRoles, authorizeStudentOrRoles, requireStudentOwnership } from "../middleware/authMiddleware.js";
 import { validate } from "../validators/index.js";
 import { studentSchemas } from "../validators/student/studentSchema.js";
@@ -35,5 +35,7 @@ router.get("/:id/transactions/:txn_id", authorizeStudentOrRoles("principal", "ac
 // Fee Ledger (nested under students)
 // ========================
 router.get("/:id/fee-ledger", authorizeStudentOrRoles("principal", "accountant", "admin"), rateLimiters.transactionRead, validate(paymentSchemas.feeLedger), requireStudentOwnership("id"), getFeeLedger);
+router.get("/:id/fee-overview", authorizeStudentOrRoles("principal", "accountant", "admin"), rateLimiters.transactionRead, validate(paymentSchemas.feeLedger), requireStudentOwnership("id"), getStudentFeeOverview);
+router.get("/:id/over-collection", authorizeStudentOrRoles("principal", "accountant", "admin"), rateLimiters.transactionRead, validate(paymentSchemas.feeLedger), requireStudentOwnership("id"), getOverCollectionHistory);
 
 export default router;

@@ -165,6 +165,53 @@ const findAllTransactions = async (params = {}) => {
     return { transactions: rows, total };
 };
 
+const getLedgerByStudentAndYearNum = async (studentId, yearNum) => {
+    const [rows] = await pool.query(
+        `SELECT id as ledger_id, academic_year, academic_year_num, total_yearly_fee, total_paid, pending_fee, status
+         FROM student_fee_ledger
+         WHERE student_id = ? AND academic_year_num = ?
+         LIMIT 1`,
+        [studentId, yearNum]
+    );
+    return rows[0] || null;
+};
+
+const getOverCollectionForYear = async (studentId, carriedToYearNum) => {
+    const [rows] = await pool.query(
+        `SELECT COALESCE(SUM(amount), 0) as total
+         FROM student_over_collection
+         WHERE student_id = ?
+           AND carried_to_academic_year_num = ?
+           AND is_refunded = FALSE`,
+        [studentId, carriedToYearNum]
+    );
+    return parseFloat(rows[0]?.total || 0);
+};
+
+const getOverCollectionDetailsForYear = async (studentId, carriedToYearNum) => {
+    const [rows] = await pool.query(
+        `SELECT from_academic_year_num as from_year, amount, source
+         FROM student_over_collection
+         WHERE student_id = ?
+           AND carried_to_academic_year_num = ?
+           AND is_refunded = FALSE
+         ORDER BY from_academic_year_num ASC, id ASC`,
+        [studentId, carriedToYearNum]
+    );
+    return rows.map((r) => ({ ...r, amount: parseFloat(r.amount || 0) }));
+};
+
+const getOverCollectionHistory = async (studentId) => {
+    const [rows] = await pool.query(
+        `SELECT from_academic_year_num as from_year, carried_to_academic_year_num as carried_to_year, amount, source, is_refunded, refunded_at, created_at
+         FROM student_over_collection
+         WHERE student_id = ?
+         ORDER BY from_academic_year_num ASC, id ASC`,
+        [studentId]
+    );
+    return rows.map((r) => ({ ...r, amount: parseFloat(r.amount || 0) }));
+};
+
 export default {
     findLedgerById,
     insertTransaction,
@@ -173,5 +220,9 @@ export default {
     findTransactionWithDetails,
     findFullLedgerByStudent,
     getStudentWithCourse,
-    findAllTransactions
+    findAllTransactions,
+    getLedgerByStudentAndYearNum,
+    getOverCollectionForYear,
+    getOverCollectionDetailsForYear,
+    getOverCollectionHistory
 };

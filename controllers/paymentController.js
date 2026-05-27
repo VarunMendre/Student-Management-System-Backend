@@ -26,3 +26,13 @@ export const listAllTransactions = asyncHandler(async (req, res) => {
     const { transactions, total } = await paymentService.getAllTransactions(req.query);
     successResponse(res, { data: transactions, total }, "All transactions fetched successfully");
 });
+
+export const getStudentFeeOverview = asyncHandler(async (req, res) => {
+    const result = await paymentService.getStudentFeeOverview(parseInt(req.params.id), req.query.academic_year_num);
+    successResponse(res, result, "Student fee overview fetched successfully");
+});
+
+export const getOverCollectionHistory = asyncHandler(async (req, res) => {
+    const result = await paymentService.getOverCollectionHistory(parseInt(req.params.id));
+    successResponse(res, { data: result }, "Over-collection history fetched successfully");
+});
