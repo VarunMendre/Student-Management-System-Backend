@@ -8,19 +8,32 @@ import { normalizeEmail } from "../utils/studentOptions.js";
 const ACCESS_EXPIRY = process.env.JWT_ACCESS_EXPIRY || "15m";
 const REFRESH_EXPIRY = process.env.JWT_REFRESH_EXPIRY || "7d";
 const REFRESH_COOKIE_MAX_AGE = 7 * 24 * 60 * 60 * 1000;
-const frontendOrigins = (process.env.FRONTEND_URL || "")
+const normalizeOrigin = (origin = "") => String(origin).trim().replace(/\/+$/, "");
+const parseBooleanEnv = (value, fallback = false) => {
+    if (value === undefined) {
+        return fallback;
+    }
+
+    return String(value).trim().toLowerCase() === "true";
+};
+const frontendOrigins = String(process.env.FRONTEND_URL || "")
     .split(",")
-    .map((origin) => origin.trim().replace(/\/+$/, ""))
+    .map(normalizeOrigin)
     .filter(Boolean);
 const IS_HTTPS_FRONTEND = frontendOrigins.some((origin) => origin.startsWith("https://"));
 const requestedSameSite = String(process.env.COOKIE_SAME_SITE || "").trim().toLowerCase();
 const COOKIE_SAME_SITE = ["strict", "lax", "none"].includes(requestedSameSite)
     ? requestedSameSite
     : (IS_HTTPS_FRONTEND ? "none" : "lax");
-const COOKIE_SECURE = process.env.COOKIE_SECURE
-    ? String(process.env.COOKIE_SECURE).trim().toLowerCase() === "true"
-    : (COOKIE_SAME_SITE === "none" || IS_HTTPS_FRONTEND);
+const COOKIE_SECURE = parseBooleanEnv(
+    process.env.COOKIE_SECURE,
+    COOKIE_SAME_SITE === "none" || IS_HTTPS_FRONTEND
+);
 const COOKIE_DOMAIN = process.env.COOKIE_DOMAIN || undefined;
+const COOKIE_PARTITIONED = parseBooleanEnv(
+    process.env.COOKIE_PARTITIONED,
+    COOKIE_SAME_SITE === "none"
+);
 
 const getRefreshCookieOptions = () => {
     const options = {
@@ -28,14 +41,37 @@ const getRefreshCookieOptions = () => {
         secure: COOKIE_SAME_SITE === "none" ? true : COOKIE_SECURE,
         sameSite: COOKIE_SAME_SITE,
         maxAge: REFRESH_COOKIE_MAX_AGE,
-        path: "/"
+        path: "/",
+        priority: "high"
     };
+
+    // Cross-site auth cookies are increasingly restricted by browsers.
+    // Partitioned cookies improve compatibility when frontend and API live on different sites.
+    if (COOKIE_PARTITIONED && COOKIE_SAME_SITE === "none") {
+        options.partitioned = true;
+    }
 
     if (COOKIE_DOMAIN) {
         options.domain = COOKIE_DOMAIN;
     }
 
     return options;
+};
+
+const throwInvalidCredentials = () => {
+    throw new CustomError({
+        message: "Invalid email, password, or role",
+        statusCode: 401,
+        code: ErrorCodes.UNAUTHORIZED
+    });
+};
+
+const throwUserNotFound = () => {
+    throw new CustomError({
+        message: "User not found",
+        statusCode: 404,
+        code: ErrorCodes.NOT_FOUND
+    });
 };
 
 const buildAuthPayload = (user, tokenType) => ({
@@ -70,11 +106,7 @@ const ensureUserExists = async (userId) => {
     const user = await userModel.findByIdWithPassword(userId);
 
     if (!user) {
-        throw new CustomError({
-            message: "User not found",
-            statusCode: 404,
-            code: ErrorCodes.NOT_FOUND
-        });
+        throwUserNotFound();
     }
 
     return user;
@@ -92,20 +124,8 @@ const loginUser = async ({ email, password, role }) => {
     const normalizedEmail = normalizeEmail(email);
     const user = await userModel.findByEmail(normalizedEmail);
 
-    if (!user) {
-        throw new CustomError({
-            message: "Invalid email, password, or role",
-            statusCode: 401,
-            code: ErrorCodes.UNAUTHORIZED
-        });
-    }
-
-    if (user.role !== role) {
-        throw new CustomError({
-            message: "Invalid email, password, or role",
-            statusCode: 401,
-            code: ErrorCodes.UNAUTHORIZED
-        });
+    if (!user || user.role !== role) {
+        throwInvalidCredentials();
     }
 
     if (!user.is_active) {
@@ -119,11 +139,7 @@ const loginUser = async ({ email, password, role }) => {
     const isPasswordValid = await bcrypt.compare(password, user.password);
 
     if (!isPasswordValid) {
-        throw new CustomError({
-            message: "Invalid email, password, or role",
-            statusCode: 401,
-            code: ErrorCodes.UNAUTHORIZED
-        });
+        throwInvalidCredentials();
     }
 
     const { accessToken, refreshToken } = await createSessionTokens(user);
@@ -181,11 +197,7 @@ const getCurrentUser = async (userId) => {
     const user = await userModel.findById(userId);
 
     if (!user) {
-        throw new CustomError({
-            message: "User not found",
-            statusCode: 404,
-            code: ErrorCodes.NOT_FOUND
-        });
+        throwUserNotFound();
     }
 
     return sanitizeUser(user);

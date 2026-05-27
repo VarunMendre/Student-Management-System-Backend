@@ -9,8 +9,7 @@ export const login = asyncHandler(async (req, res) => {
     res.cookie("refreshToken", refreshToken, authService.getRefreshCookieOptions());
     successResponse(res, {
         user,
-        accessToken,
-        refreshToken
+        accessToken
     }, "Login successful");
 });
 
@@ -25,7 +24,6 @@ export const refresh = asyncHandler(async (req, res) => {
 
     successResponse(res, {
         accessToken,
-        refreshToken,
         user
     }, "Token refreshed successfully");
 });
