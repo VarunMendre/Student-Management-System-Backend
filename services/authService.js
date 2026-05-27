@@ -55,18 +55,6 @@ const getRefreshCookieOptions = () => {
         options.domain = COOKIE_DOMAIN;
     }
 
-    if (!didLogCookieConfig && String(process.env.DEBUG_AUTH_COOKIE || "").toLowerCase() === "true") {
-        didLogCookieConfig = true;
-        // Avoid logging secrets. This prints only the flags that affect cookie send/receive behavior.
-        console.log("[auth] refresh cookie config", {
-            COOKIE_SAME_SITE,
-            COOKIE_SECURE,
-            COOKIE_DOMAIN: COOKIE_DOMAIN || null,
-            FRONTEND_URL: (process.env.FRONTEND_URL || "").split(",").map((v) => v.trim()).filter(Boolean),
-            computed: options
-        });
-    }
-
     return options;
 };
 
