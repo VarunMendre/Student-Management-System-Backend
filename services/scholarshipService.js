@@ -237,24 +237,8 @@ const reconcileGovSheetRows = async ({ actorUserId, actorRole, rows = [] }) => {
 
     const pendingMap = new Map(pendingApps.map((item) => [item.application_id, item]));
     const matchedMap = new Map(matchedApps.map((item) => [item.application_id, item]));
-    const outstandingSummaries = await scholarshipModel.getOutstandingSummariesByStudentIds(
-        [...new Set(matchedApps.map((item) => Number(item.student_id)).filter(Number.isInteger))]
-    );
-    const outstandingMap = new Map(
-        outstandingSummaries.map((item) => [
-            Number(item.student_id),
-            {
-                ...item,
-                total_course_fee: parseFloat(item.total_course_fee || 0),
-                total_paid: parseFloat(item.total_paid || 0),
-                total_pending: parseFloat(item.total_pending || 0)
-            }
-        ])
-    );
-
     const matched = [];
     const govNotInPortal = [];
-    const fullyPaidRecords = [];
 
     for (const row of normalizedGovRows) {
         if (duplicateIds.includes(row.application_id)) {
@@ -279,19 +263,6 @@ const reconcileGovSheetRows = async ({ actorUserId, actorRole, rows = [] }) => {
 
         const app = pendingMap.get(row.application_id);
         if (app) {
-            const outstanding = outstandingMap.get(Number(app.student_id));
-            if (outstanding && outstanding.total_pending <= 0) {
-                fullyPaidRecords.push({
-                    application_id: row.application_id,
-                    student_id: app.student_id,
-                    student_name: app.full_name,
-                    amount: row.amount,
-                    installment_no: row.installment_no,
-                    reason: "Student has already cleared all fees"
-                });
-                continue;
-            }
-
             matched.push({
                 application_id: row.application_id,
                 student_id: app.student_id,
@@ -315,7 +286,7 @@ const reconcileGovSheetRows = async ({ actorUserId, actorRole, rows = [] }) => {
             portal_not_in_gov_count: portalNotInGov.length,
             gov_not_in_portal_count: govNotInPortal.length,
             conflicts_count: duplicateIds.length,
-            fully_paid_count: fullyPaidRecords.length
+            fully_paid_count: 0
         },
         matched,
         portal_not_in_gov: portalNotInGov.map((app) => ({
@@ -326,7 +297,7 @@ const reconcileGovSheetRows = async ({ actorUserId, actorRole, rows = [] }) => {
         })),
         gov_not_in_portal: govNotInPortal,
         conflicts: duplicateIds,
-        fully_paid_records: fullyPaidRecords
+        fully_paid_records: []
     };
 };
 
@@ -360,7 +331,10 @@ const disburseScholarshipBatch = async (disbursements, actor = {}) => {
                 });
             }
 
-            if (applicationRecord && applicationRecord.submission_status === "conflict") {
+            // Auto-resolve self-owned conflict during disbursal: if application belongs to the
+            // same student, we allow processing and mark it approved after successful txn.
+            // Cross-student conflicts are still blocked by the check above.
+            if (applicationRecord && applicationRecord.submission_status === "conflict" && Number(applicationRecord.student_id) !== Number(student_id)) {
                 throw new CustomError({
                     message: "Application is in conflict state and must be resolved first",
                     statusCode: 409,

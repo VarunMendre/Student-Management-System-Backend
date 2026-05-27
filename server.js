@@ -74,8 +74,20 @@ app.use("/api/v1/users", userManagementRoutes);
 
 // error handling middleware
 app.use((err, req, res, next) => {
+    const isMysqlDuplicate = err?.code === "ER_DUP_ENTRY" || err?.errno === 1062;
+    const duplicateFieldMatch = String(err?.message || "").match(/for key '([^']+)'/i);
+    const duplicateField = duplicateFieldMatch?.[1] || "field";
     const normalizedError = err instanceof CustomError
         ? err
+        : isMysqlDuplicate
+            ? new CustomError({
+                message: `Duplicate ${duplicateField}`,
+                statusCode: 409,
+                code: ErrorCodes.DUPLICATE_ENTRY,
+                details: process.env.NODE_ENV !== "production" && err?.message
+                    ? { originalMessage: err.message, field: duplicateField }
+                    : null
+            })
         : err?.name === "MulterError"
             ? new CustomError({
                 message: err.code === "LIMIT_FILE_SIZE"

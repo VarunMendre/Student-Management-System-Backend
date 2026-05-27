@@ -132,4 +132,58 @@ const getAllTransactions = async (filters = {}) => {
     return { transactions: rows, total };
 };
 
-export default { createPayment, getTransactions, getTransactionById, getFeeLedger, getAllTransactions };
+const getStudentFeeOverview = async (studentId, academicYearNum) => {
+    if (!await studentModel.exists(studentId)) throw new CustomError({
+        message: "Student not found",
+        statusCode: 404,
+        code: ErrorCodes.NOT_FOUND
+    });
+    const yearNum = Number(academicYearNum || 0);
+    if (!yearNum) throw new CustomError({
+        message: "academic_year_num is required",
+        statusCode: 400,
+        code: ErrorCodes.VALIDATION_ERROR
+    });
+    const ledger = await paymentModel.getLedgerByStudentAndYearNum(studentId, yearNum);
+    if (!ledger) throw new CustomError({
+        message: "Ledger not found for year",
+        statusCode: 404,
+        code: ErrorCodes.NOT_FOUND
+    });
+
+    const currentYearFee = parseFloat(ledger.total_yearly_fee || 0);
+    const totalPaid = parseFloat(ledger.total_paid || 0);
+    const overCollectionFromPrev = await paymentModel.getOverCollectionForYear(studentId, yearNum);
+    const overCollectionDetails = await paymentModel.getOverCollectionDetailsForYear(studentId, yearNum);
+    const adjustedFee = Math.max(0, currentYearFee - overCollectionFromPrev);
+    const pending = Math.max(0, adjustedFee - totalPaid);
+
+    return {
+        academic_year_num: yearNum,
+        current_year_fee: currentYearFee,
+        over_collection_from_prev: overCollectionFromPrev,
+        adjusted_fee: adjustedFee,
+        total_paid: totalPaid,
+        pending,
+        over_collection_details: overCollectionDetails
+    };
+};
+
+const getOverCollectionHistory = async (studentId) => {
+    if (!await studentModel.exists(studentId)) throw new CustomError({
+        message: "Student not found",
+        statusCode: 404,
+        code: ErrorCodes.NOT_FOUND
+    });
+    return paymentModel.getOverCollectionHistory(studentId);
+};
+
+export default {
+    createPayment,
+    getTransactions,
+    getTransactionById,
+    getFeeLedger,
+    getAllTransactions,
+    getStudentFeeOverview,
+    getOverCollectionHistory
+};
