@@ -7,3 +7,4 @@ uploads/*
 !uploads/scholarship-forms/
 uploads/scholarship-forms/*
 !uploads/scholarship-forms/.gitkeep
+DATABASE_SETUP.md
