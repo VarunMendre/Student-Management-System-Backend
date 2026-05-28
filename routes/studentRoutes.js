@@ -28,14 +28,14 @@ router.post("/:id/payments", authorizeRoles("principal", "accountant"), rateLimi
 // ========================
 // Transactions (nested under students)
 // ========================
-router.get("/:id/transactions", authorizeStudentOrRoles("principal", "accountant", "admin"), rateLimiters.transactionRead, validate(paymentSchemas.listTransactions), requireStudentOwnership("id"), getTransactions);
-router.get("/:id/transactions/:txn_id", authorizeStudentOrRoles("principal", "accountant", "admin"), rateLimiters.transactionRead, validate(paymentSchemas.transactionById), requireStudentOwnership("id"), getTransactionById);
+router.get("/:id/transactions", authorizeStudentOrRoles("principal", "accountant", "admin"), rateLimiters.transactionRead, validate(paymentSchemas.listTransactions), getTransactions);
+router.get("/:id/transactions/:txn_id", authorizeStudentOrRoles("principal", "accountant", "admin"), rateLimiters.transactionRead, validate(paymentSchemas.transactionById), getTransactionById);
 
 // ========================
 // Fee Ledger (nested under students)
 // ========================
-router.get("/:id/fee-ledger", authorizeStudentOrRoles("principal", "accountant", "admin"), rateLimiters.transactionRead, validate(paymentSchemas.feeLedger), requireStudentOwnership("id"), getFeeLedger);
-router.get("/:id/fee-overview", authorizeStudentOrRoles("principal", "accountant", "admin"), rateLimiters.transactionRead, validate(paymentSchemas.feeOverview), requireStudentOwnership("id"), getStudentFeeOverview);
-router.get("/:id/over-collection", authorizeStudentOrRoles("principal", "accountant", "admin"), rateLimiters.transactionRead, validate(paymentSchemas.feeLedger), requireStudentOwnership("id"), getOverCollectionHistory);
+router.get("/:id/fee-ledger", authorizeStudentOrRoles("principal", "accountant", "admin"), rateLimiters.transactionRead, validate(paymentSchemas.feeLedger), getFeeLedger);
+router.get("/:id/fee-overview", authorizeStudentOrRoles("principal", "accountant", "admin"), rateLimiters.transactionRead, validate(paymentSchemas.feeOverview), getStudentFeeOverview);
+router.get("/:id/over-collection", authorizeStudentOrRoles("principal", "accountant", "admin"), rateLimiters.transactionRead, validate(paymentSchemas.feeLedger), getOverCollectionHistory);
 
 export default router;
