@@ -1,5 +1,20 @@
 import { pool } from "../config/db.js";
 
+let hasParticularsColumnCache = null;
+
+const hasParticularsColumn = async (connection = pool) => {
+    if (hasParticularsColumnCache !== null) return hasParticularsColumnCache;
+    const [rows] = await connection.query(
+        `SELECT COUNT(*) as count
+         FROM INFORMATION_SCHEMA.COLUMNS
+         WHERE TABLE_SCHEMA = DATABASE()
+           AND TABLE_NAME = 'fee_transactions'
+           AND COLUMN_NAME = 'particulars'`
+    );
+    hasParticularsColumnCache = Number(rows[0]?.count || 0) > 0;
+    return hasParticularsColumnCache;
+};
+
 const findLedgerById = async (ledgerId) => {
     const [rows] = await pool.query(
         "SELECT id, student_id, academic_year, academic_year_num, total_yearly_fee, total_paid, pending_fee, status FROM student_fee_ledger WHERE id = ?",
@@ -9,15 +24,22 @@ const findLedgerById = async (ledgerId) => {
 };
 
 const insertTransaction = async (connection, data) => {
-    const { studentId, ledger_id, amount_paid, fee_applied_amount, payment_mode, payment_reference, receiptNumber, remarks, transaction_date } = data;
-    const [result] = await connection.query(
-        `INSERT INTO fee_transactions (student_id, ledger_id, amount_paid, payment_mode, payment_reference, receipt_number, remarks, transaction_date, created_by)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [studentId, ledger_id, amount_paid, payment_mode, payment_reference, receiptNumber, remarks, transaction_date || new Date().toISOString().slice(0, 10), null]
-    );
+    const { studentId, ledger_id, amount_paid, fee_applied_amount, payment_mode, payment_reference, receiptNumber, remarks, particulars, transaction_date } = data;
+    const canStoreParticulars = await hasParticularsColumn(connection);
+    const [result] = canStoreParticulars
+        ? await connection.query(
+            `INSERT INTO fee_transactions (student_id, ledger_id, amount_paid, payment_mode, payment_reference, receipt_number, remarks, particulars, transaction_date, created_by)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [studentId, ledger_id, amount_paid, payment_mode, payment_reference, receiptNumber, remarks, JSON.stringify(particulars || []), transaction_date || new Date().toISOString().slice(0, 10), null]
+        )
+        : await connection.query(
+            `INSERT INTO fee_transactions (student_id, ledger_id, amount_paid, payment_mode, payment_reference, receipt_number, remarks, transaction_date, created_by)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [studentId, ledger_id, amount_paid, payment_mode, payment_reference, receiptNumber, remarks, transaction_date || new Date().toISOString().slice(0, 10), null]
+        );
     
     const [rows] = await connection.query(
-        `SELECT id, receipt_number, amount_paid, payment_mode, payment_reference, DATE_FORMAT(transaction_date, '%Y-%m-%d') as transaction_date, remarks, created_at FROM fee_transactions WHERE id = ?`,
+        `SELECT id, receipt_number, amount_paid, payment_mode, payment_reference, DATE_FORMAT(transaction_date, '%Y-%m-%d') as transaction_date, remarks, ${canStoreParticulars ? "particulars" : "NULL as particulars"}, created_at FROM fee_transactions WHERE id = ?`,
         [result.insertId]
     );
     return { ...rows[0], fee_applied_amount };
@@ -39,10 +61,11 @@ const updateLedgerTotalPaid = async (connection, ledgerId, totalPaid, status) =>
 };
 
 const findTransactionsByStudent = async (studentId, yearNum) => {
+    const canReadParticulars = await hasParticularsColumn();
     let query = `
         SELECT 
-            ft.id, ft.amount_paid, ft.payment_mode, ft.payment_reference,
-            ft.receipt_number, sfl.academic_year, ft.remarks,
+            ft.id, ft.ledger_id, ft.amount_paid, ft.payment_mode, ft.payment_reference,
+            ft.receipt_number, sfl.academic_year, sfl.academic_year_num, ft.remarks, ${canReadParticulars ? "ft.particulars" : "NULL as particulars"},
             DATE_FORMAT(ft.transaction_date, '%Y-%m-%d') as transaction_date, 
             ft.created_at, ft.status
         FROM fee_transactions ft
@@ -61,15 +84,16 @@ const findTransactionsByStudent = async (studentId, yearNum) => {
 };
 
 const findTransactionWithDetails = async (txnId, studentId) => {
+    const canReadParticulars = await hasParticularsColumn();
     const [rows] = await pool.query(
         `SELECT 
-            ft.receipt_number, 
+            ft.receipt_number, ft.ledger_id,
             s.full_name as student_name, s.email,
             c.course_name, cb.batch_name,
             sfl.academic_year,
             ft.amount_paid, ft.payment_mode, ft.payment_reference,
             DATE_FORMAT(ft.transaction_date, '%Y-%m-%d') as transaction_date, 
-            ft.remarks, ft.created_by, ft.created_at
+            ft.remarks, ${canReadParticulars ? "ft.particulars" : "NULL as particulars"}, ft.created_by, ft.created_at
          FROM fee_transactions ft
          JOIN students s ON ft.student_id = s.id
          JOIN courses c ON s.course_id = c.id
@@ -104,6 +128,7 @@ const getStudentWithCourse = async (studentId) => {
 };
 
 const findAllTransactions = async (params = {}) => {
+    const canReadParticulars = await hasParticularsColumn();
     const normalizedDate = params.date || params.transaction_date || null;
     const normalizedStartDate = params.startDate || params.fromDate || params.start_date || null;
     const normalizedEndDate = params.endDate || params.toDate || params.end_date || null;
@@ -143,7 +168,7 @@ const findAllTransactions = async (params = {}) => {
     let dataQuery = `
         SELECT 
             ft.id, ft.student_id as studentId, ft.amount_paid as paidAmount, ft.payment_mode as paymentMode, ft.payment_reference as referenceNo,
-            ft.receipt_number as receiptNo, DATE_FORMAT(ft.transaction_date, '%Y-%m-%d') as date, ft.remarks, ft.created_at as createdAt, ft.created_by as recordedBy,
+            ft.receipt_number as receiptNo, DATE_FORMAT(ft.transaction_date, '%Y-%m-%d') as date, ft.remarks, ${canReadParticulars ? "ft.particulars" : "NULL as particulars"}, ft.created_at as createdAt, ft.created_by as recordedBy,
             s.full_name as studentName, c.course_name as courseName, cb.batch_name as batchName, sfl.academic_year as year,
             s.mobile_number as studentMobile, s.gender as studentGender, s.caste_category as studentCaste, s.prn_number as prnNumber
         ${baseFromJoin}
@@ -226,6 +251,26 @@ const getOverCollectionDetailsFromYear = async (studentId, fromYearNum) => {
     return rows.map((r) => ({ ...r, amount: parseFloat(r.amount || 0) }));
 };
 
+const getFeeParticularsForLedger = async (ledgerId) => {
+    const [rows] = await pool.query(
+        `SELECT cf.component_name, cf.amount
+         FROM student_fee_ledger sfl
+         JOIN students s ON s.id = sfl.student_id
+         JOIN course_fees cf ON cf.batch_id = s.batch_id
+         WHERE sfl.id = ?
+           AND (
+             cf.normalized_year = sfl.academic_year
+             OR cf.component_name LIKE CONCAT(sfl.academic_year, ' - %')
+           )
+         ORDER BY cf.id ASC`,
+        [ledgerId]
+    );
+    return rows.map((row) => ({
+        name: String(row.component_name || "").split(" - ").slice(1).join(" - ") || row.component_name,
+        amount: parseFloat(row.amount || 0)
+    }));
+};
+
 const getOverCollectionHistory = async (studentId) => {
     const [rows] = await pool.query(
         `SELECT from_academic_year_num as from_year, carried_to_academic_year_num as carried_to_year, amount, source, is_refunded, refunded_at, created_at
@@ -251,5 +296,6 @@ export default {
     getOverCollectionDetailsForYear,
     getOverCollectionFromYear,
     getOverCollectionDetailsFromYear,
+    getFeeParticularsForLedger,
     getOverCollectionHistory
 };
