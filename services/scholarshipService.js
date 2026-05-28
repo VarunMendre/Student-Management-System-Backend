@@ -1,4 +1,5 @@
 import scholarshipModel from "../models/scholarshipModel.js";
+import paymentModel from "../models/paymentModel.js";
 import { generateReceiptNumber } from "../utils/receiptGenerator.js";
 import { withTransaction, withTransactionSilent } from "../utils/dbUtils.js";
 import { CustomError, ErrorCodes } from "../utils/customError.js";
@@ -378,7 +379,9 @@ const disburseScholarshipBatch = async (disbursements, actor = {}) => {
                 code: ErrorCodes.OVERPAYMENT
             });
 
-            const pendingFee = parseFloat(student.pending_fee || 0);
+            const overCollectionFromPrev = await paymentModel.getOverCollectionForYear(student_id, academic_year_num);
+            const adjustedFee = Math.max(0, parseFloat(student.total_yearly_fee || 0) - overCollectionFromPrev);
+            const pendingFee = Math.max(0, adjustedFee - parseFloat(student.total_paid || 0));
             const appliedAmount = Math.min(approvedAmount, pendingFee);
             const overCollectionAmount = Math.max(0, approvedAmount - appliedAmount);
 
@@ -391,8 +394,7 @@ const disburseScholarshipBatch = async (disbursements, actor = {}) => {
             });
 
             const newTotalPaid = parseFloat(student.total_paid) + appliedAmount;
-            const totalYearlyFee = parseFloat(student.total_yearly_fee);
-            const status = newTotalPaid >= totalYearlyFee ? "Paid" : (newTotalPaid > 0 ? "Partial" : "Pending");
+            const status = newTotalPaid >= adjustedFee ? "Paid" : (newTotalPaid > 0 ? "Partial" : "Pending");
 
             await scholarshipModel.updateLedgerStatus(client, student.ledger_id, newTotalPaid, status);
             if (overCollectionAmount > 0) {

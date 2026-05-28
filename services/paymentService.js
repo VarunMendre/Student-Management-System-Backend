@@ -25,7 +25,9 @@ const createPayment = async (studentId, data) => {
         code: ErrorCodes.VALIDATION_ERROR
     });
 
-    const pendingFee = parseFloat(ledger.pending_fee);
+    const overCollectionFromPrev = await paymentModel.getOverCollectionForYear(studentId, ledger.academic_year_num);
+    const adjustedFee = Math.max(0, parseFloat(ledger.total_yearly_fee || 0) - overCollectionFromPrev);
+    const pendingFee = Math.max(0, adjustedFee - parseFloat(ledger.total_paid || 0));
     const receiptAmount = parseFloat(amount_paid);
     const appliedAmount = fee_applied_amount === undefined || fee_applied_amount === null
         ? receiptAmount
@@ -49,8 +51,7 @@ const createPayment = async (studentId, data) => {
         });
 
         const newTotalPaid = parseFloat(ledger.total_paid) + appliedAmount;
-        const totalYearlyFee = parseFloat(ledger.total_yearly_fee);
-        let status = newTotalPaid >= totalYearlyFee ? "Paid" : (newTotalPaid > 0 ? "Partial" : "Pending");
+        let status = newTotalPaid >= adjustedFee ? "Paid" : (newTotalPaid > 0 ? "Partial" : "Pending");
 
         const updatedLedger = await paymentModel.updateLedgerTotalPaid(client, ledger_id, newTotalPaid, status);
 
@@ -65,7 +66,7 @@ const createPayment = async (studentId, data) => {
                 ...updatedLedger,
                 total_yearly_fee: parseFloat(updatedLedger.total_yearly_fee),
                 total_paid: parseFloat(updatedLedger.total_paid),
-                pending_fee: parseFloat(updatedLedger.pending_fee)
+                pending_fee: Math.max(0, adjustedFee - parseFloat(updatedLedger.total_paid))
             }
         };
     }).catch(error => {
@@ -155,6 +156,8 @@ const getStudentFeeOverview = async (studentId, academicYearNum) => {
     const totalPaid = parseFloat(ledger.total_paid || 0);
     const overCollectionFromPrev = await paymentModel.getOverCollectionForYear(studentId, yearNum);
     const overCollectionDetails = await paymentModel.getOverCollectionDetailsForYear(studentId, yearNum);
+    const overCollectionCarriedForward = await paymentModel.getOverCollectionFromYear(studentId, yearNum);
+    const overCollectionCarryForwardDetails = await paymentModel.getOverCollectionDetailsFromYear(studentId, yearNum);
     const adjustedFee = Math.max(0, currentYearFee - overCollectionFromPrev);
     const pending = Math.max(0, adjustedFee - totalPaid);
 
@@ -162,10 +165,12 @@ const getStudentFeeOverview = async (studentId, academicYearNum) => {
         academic_year_num: yearNum,
         current_year_fee: currentYearFee,
         over_collection_from_prev: overCollectionFromPrev,
+        over_collection_carried_forward: overCollectionCarriedForward,
         adjusted_fee: adjustedFee,
         total_paid: totalPaid,
         pending,
-        over_collection_details: overCollectionDetails
+        over_collection_details: overCollectionDetails,
+        over_collection_carry_forward_details: overCollectionCarryForwardDetails
     };
 };
 
