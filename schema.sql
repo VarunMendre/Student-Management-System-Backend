@@ -116,6 +116,7 @@ CREATE TABLE IF NOT EXISTS fee_transactions (
     payment_reference   VARCHAR(100) DEFAULT NULL,
     receipt_number      VARCHAR(50) UNIQUE NOT NULL,
     remarks             VARCHAR(255) DEFAULT NULL,
+    particulars          JSON DEFAULT NULL,
     application_id      VARCHAR(100) DEFAULT NULL,
     installment_no      INTEGER DEFAULT NULL,
     status              ENUM('Active', 'Reversed') DEFAULT 'Active',

@@ -4,8 +4,39 @@ import paymentModel from "../models/paymentModel.js";
 import studentModel from "../models/studentModel.js";
 import { withTransaction } from "../utils/dbUtils.js";
 
+const parseParticulars = (value) => {
+    if (Array.isArray(value)) return value;
+    if (!value) return [];
+    try {
+        const parsed = typeof value === "string" ? JSON.parse(value) : value;
+        return Array.isArray(parsed) ? parsed : [];
+    } catch {
+        return [];
+    }
+};
+
+const sumParticulars = (items = []) => items.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+
+const getFallbackParticulars = async (row) => {
+    const storedParticulars = parseParticulars(row.particulars);
+    if (storedParticulars.length > 0) return storedParticulars;
+
+    const amountPaid = parseFloat(row.amount_paid || 0);
+    const paymentMode = String(row.payment_mode || "").toLowerCase();
+    if (paymentMode === "scholarship") {
+        return [{ name: row.remarks || "Scholarship", amount: amountPaid }];
+    }
+
+    const feeParticulars = await paymentModel.getFeeParticularsForLedger(row.ledger_id);
+    if (feeParticulars.length > 0 && sumParticulars(feeParticulars) === amountPaid) {
+        return feeParticulars;
+    }
+
+    return [{ name: row.remarks || "Fee Payment", amount: amountPaid }];
+};
+
 const createPayment = async (studentId, data) => {
-    const { ledger_id, amount_paid, fee_applied_amount, payment_mode, payment_reference, remarks, transaction_date } = data;
+    const { ledger_id, amount_paid, fee_applied_amount, payment_mode, payment_reference, remarks, particulars = [], transaction_date } = data;
 
     if (!await studentModel.exists(studentId)) throw new CustomError({
         message: "Student not found",
@@ -47,7 +78,7 @@ const createPayment = async (studentId, data) => {
 
     return await withTransaction(async (client) => {
         const transaction = await paymentModel.insertTransaction(client, {
-            studentId, ledger_id, amount_paid: receiptAmount, fee_applied_amount: appliedAmount, payment_mode, payment_reference, receiptNumber, remarks, transaction_date
+            studentId, ledger_id, amount_paid: receiptAmount, fee_applied_amount: appliedAmount, payment_mode, payment_reference, receiptNumber, remarks, particulars, transaction_date
         });
 
         const newTotalPaid = parseFloat(ledger.total_paid) + appliedAmount;
@@ -60,6 +91,7 @@ const createPayment = async (studentId, data) => {
                 ...transaction,
                 amount_paid: parseFloat(transaction.amount_paid),
                 fee_applied_amount: appliedAmount,
+                particulars: parseParticulars(transaction.particulars),
                 amount_in_words: amountToWords(parseFloat(transaction.amount_paid))
             },
             updated_ledger: {
@@ -87,7 +119,13 @@ const getTransactions = async (studentId, filters = {}) => {
         code: ErrorCodes.NOT_FOUND
     });
     const rows = await paymentModel.findTransactionsByStudent(studentId, filters.academic_year_num);
-    return rows.map(row => ({ ...row, amount_paid: parseFloat(row.amount_paid) }));
+    return Promise.all(rows.map(async (row) => {
+        return {
+            ...row,
+            amount_paid: parseFloat(row.amount_paid),
+            particulars: await getFallbackParticulars(row)
+        };
+    }));
 };
 
 const getTransactionById = async (studentId, txnId) => {
@@ -97,7 +135,12 @@ const getTransactionById = async (studentId, txnId) => {
         statusCode: 404,
         code: ErrorCodes.NOT_FOUND
     });
-    return { ...txn, amount_paid: parseFloat(txn.amount_paid), amount_in_words: amountToWords(parseFloat(txn.amount_paid)) };
+    return {
+        ...txn,
+        amount_paid: parseFloat(txn.amount_paid),
+        particulars: await getFallbackParticulars(txn),
+        amount_in_words: amountToWords(parseFloat(txn.amount_paid))
+    };
 };
 
 const getFeeLedger = async (studentId) => {

@@ -5,6 +5,11 @@ const idRegex = /^\d+$/;
 const dateRegex = /^\d{4}-\d{2}-\d{2}$/; // YYYY-MM-DD
 
 const paymentModes = ["Cash", "UPI", "Cheque", "DD", "Online", "NEFT", "RTGS"];
+const feeParticularSchema = z.object({
+    name: z.string().trim().min(1).max(100),
+    amount: z.number().min(0)
+        .or(z.string().regex(/^\d+(\.\d{1,2})?$/, "Invalid amount format").transform(val => parseFloat(val)))
+});
 
 export const paymentSchemas = {
     // Schema for POST /api/v1/students/:id/payments
@@ -24,6 +29,7 @@ export const paymentSchemas = {
             }),
             payment_reference: z.string().max(100).nullable().optional().default(null),
             remarks: z.string().max(255).nullable().optional().default(null),
+            particulars: z.array(feeParticularSchema).max(50).optional().default([]),
             transaction_date: z.string().regex(dateRegex, "Date must be in YYYY-MM-DD format").optional()
         })
     }),
@@ -50,6 +56,15 @@ export const paymentSchemas = {
     feeLedger: z.object({
         params: z.object({
             id: z.string().regex(idRegex, "Invalid student ID format")
+        })
+    }),
+
+    feeOverview: z.object({
+        params: z.object({
+            id: z.string().regex(idRegex, "Invalid student ID format")
+        }),
+        query: z.object({
+            academic_year_num: z.string().regex(idRegex).transform(Number)
         })
     })
 };

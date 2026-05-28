@@ -35,7 +35,7 @@ router.get("/:id/transactions/:txn_id", authorizeStudentOrRoles("principal", "ac
 // Fee Ledger (nested under students)
 // ========================
 router.get("/:id/fee-ledger", authorizeStudentOrRoles("principal", "accountant", "admin"), rateLimiters.transactionRead, validate(paymentSchemas.feeLedger), requireStudentOwnership("id"), getFeeLedger);
-router.get("/:id/fee-overview", authorizeStudentOrRoles("principal", "accountant", "admin"), rateLimiters.transactionRead, validate(paymentSchemas.feeLedger), requireStudentOwnership("id"), getStudentFeeOverview);
+router.get("/:id/fee-overview", authorizeStudentOrRoles("principal", "accountant", "admin"), rateLimiters.transactionRead, validate(paymentSchemas.feeOverview), requireStudentOwnership("id"), getStudentFeeOverview);
 router.get("/:id/over-collection", authorizeStudentOrRoles("principal", "accountant", "admin"), rateLimiters.transactionRead, validate(paymentSchemas.feeLedger), requireStudentOwnership("id"), getOverCollectionHistory);
 
 export default router;
