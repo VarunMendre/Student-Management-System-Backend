@@ -58,7 +58,7 @@ app.use((req, res, next) => {
 });
 
 app.get("/", (req, res) => {
-    res.send("MySQL + Express API is running Hello World!");
+    res.json({message: "MySQL + ExpressJs server is running !!!"});
 });
 
 app.use("/api/v1", rateLimiters.globalApi);
