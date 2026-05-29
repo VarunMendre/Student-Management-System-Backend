@@ -79,7 +79,11 @@ const enrollStudent = async (data) => {
     });
 
     const yearLabels = getAcademicYearLabels(batch.duration);
-    
+    console.log("ENROLL DEBUG", {
+  batchDuration: batch.duration,
+  yearLabels,
+  batchFees
+});    
     return withTransaction(async (client) => {
         const student = await studentModel.createStudent(client, data);
         const hashedPassword = await bcrypt.hash(`${mobile_number}`, 12);
