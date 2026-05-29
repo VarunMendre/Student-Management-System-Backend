@@ -364,28 +364,31 @@ const disburseScholarshipBatch = async (disbursements, actor = {}) => {
                 student_id,
                 academic_year_num
             );
-            if (totalReceived >= maxAmount) throw new CustomError({
-                message: `Limit reached (${maxAmount})`,
-                statusCode: 400,
-                code: ErrorCodes.OVERPAYMENT,
-                details: {
-                    max_amount: maxAmount,
-                    total_received: totalReceived
-                }
-            });
 
             const requestedAmount = parseFloat(amount);
             const remainingLimit = Math.max(0, maxAmount - totalReceived);
-            const approvedAmount = Math.min(requestedAmount, remainingLimit);
-            if (approvedAmount <= 0) throw new CustomError({
-                message: "No amount applicable (scholarship limit reached)",
-                statusCode: 400,
-                code: ErrorCodes.OVERPAYMENT
-            });
-
             const overCollectionFromPrev = await paymentModel.getOverCollectionForYear(student_id, academic_year_num);
             const adjustedFee = Math.max(0, parseFloat(student.total_yearly_fee || 0) - overCollectionFromPrev);
             const pendingFee = Math.max(0, adjustedFee - parseFloat(student.total_paid || 0));
+            const approvedAmount = Math.min(requestedAmount, remainingLimit);
+            if (approvedAmount <= 0) throw new CustomError({
+                message: pendingFee <= 0
+                    ? "No current-year fee balance; scholarship can only be booked as over-collection, but current limit is exhausted"
+                    : "No amount applicable (scholarship limit reached)",
+                statusCode: 400,
+                code: ErrorCodes.OVERPAYMENT,
+                details: {
+                    reason: pendingFee <= 0 ? "fee_balance_zero" : "scholarship_limit_exhausted",
+                    max_amount: maxAmount,
+                    total_received: totalReceived,
+                    requested_amount: requestedAmount,
+                    remaining_limit: remainingLimit,
+                    current_year_fee: adjustedFee,
+                    total_paid: parseFloat(student.total_paid || 0),
+                    pending_fee: pendingFee
+                }
+            });
+
             const appliedAmount = Math.min(approvedAmount, pendingFee);
             const overCollectionAmount = Math.max(0, approvedAmount - appliedAmount);
 
