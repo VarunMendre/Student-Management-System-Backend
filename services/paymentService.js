@@ -17,19 +17,47 @@ const parseParticulars = (value) => {
 
 const sumParticulars = (items = []) => items.reduce((sum, item) => sum + Number(item.amount || 0), 0);
 
+const isGenericParticulars = (particulars) => {
+    if (!Array.isArray(particulars) || particulars.length === 0) return true;
+    return particulars.some(p => {
+        const name = String(p?.name || p || '').trim().toLowerCase();
+        return name.startsWith('fees for') || name.startsWith('fees of') || name === 'fee payment' || name === 'fees';
+    });
+};
+
 const getFallbackParticulars = async (row) => {
     const storedParticulars = parseParticulars(row.particulars);
-    if (storedParticulars.length > 0) return storedParticulars;
-
     const amountPaid = parseFloat(row.amount_paid || 0);
+
+    if (storedParticulars.length > 0 && !isGenericParticulars(storedParticulars)) {
+        return storedParticulars;
+    }
+
     const paymentMode = String(row.payment_mode || "").toLowerCase();
     if (paymentMode === "scholarship") {
         return [{ name: row.remarks || "Scholarship", amount: amountPaid }];
     }
 
     const feeParticulars = await paymentModel.getFeeParticularsForLedger(row.ledger_id);
-    if (feeParticulars.length > 0 && sumParticulars(feeParticulars) === amountPaid) {
-        return feeParticulars;
+    if (feeParticulars.length > 0) {
+        let remaining = amountPaid;
+        const result = [];
+        for (const comp of feeParticulars) {
+            if (remaining <= 0) break;
+            const allocated = Math.min(remaining, comp.amount);
+            if (allocated > 0) {
+                result.push({ name: comp.name, amount: allocated });
+                remaining -= allocated;
+            }
+        }
+        if (remaining > 0) {
+            if (result.length > 0) {
+                result[result.length - 1].amount += remaining;
+            } else {
+                result.push({ name: feeParticulars[0].name, amount: remaining });
+            }
+        }
+        return result;
     }
 
     return [{ name: row.remarks || "Fee Payment", amount: amountPaid }];
