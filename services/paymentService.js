@@ -203,6 +203,8 @@ const getStudentFeeOverview = async (studentId, academicYearNum) => {
     const overCollectionCarryForwardDetails = await paymentModel.getOverCollectionDetailsFromYear(studentId, yearNum);
     const adjustedFee = Math.max(0, currentYearFee - overCollectionFromPrev);
     const pending = Math.max(0, adjustedFee - totalPaid);
+    const effectiveTotalPaid = totalPaid + overCollectionFromPrev;
+    const effectivePending = Math.max(0, currentYearFee - effectiveTotalPaid);
 
     return {
         academic_year_num: yearNum,
@@ -211,7 +213,9 @@ const getStudentFeeOverview = async (studentId, academicYearNum) => {
         over_collection_carried_forward: overCollectionCarriedForward,
         adjusted_fee: adjustedFee,
         total_paid: totalPaid,
+        effective_total_paid: effectiveTotalPaid,
         pending,
+        effective_pending: effectivePending,
         over_collection_details: overCollectionDetails,
         over_collection_carry_forward_details: overCollectionCarryForwardDetails
     };
