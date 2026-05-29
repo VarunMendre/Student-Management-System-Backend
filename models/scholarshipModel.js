@@ -82,6 +82,19 @@ const getTotalReceived = async (connection, ledgerId) => {
     return parseFloat(rows[0].total);
 };
 
+const getTotalReceivedForAcademicYear = async (connection, studentId, academicYearNum) => {
+    const [rows] = await connection.query(`
+        SELECT COALESCE(SUM(ft.amount_paid), 0) as total
+        FROM fee_transactions ft
+        JOIN student_fee_ledger sfl ON sfl.id = ft.ledger_id
+        WHERE ft.student_id = ?
+          AND sfl.academic_year_num = ?
+          AND ft.payment_mode = 'Scholarship'
+          AND ft.status = 'Active'
+    `, [studentId, academicYearNum]);
+    return parseFloat(rows[0]?.total || 0);
+};
+
 const createTransaction = async (connection, data) => {
     const { student_id, ledger_id, amount, mode, reference, receiptNumber, remarks, appId, instNo } = data;
     const [result] = await connection.query(`
@@ -531,6 +544,7 @@ export default {
     checkDuplicateDisbursal,
     getScholarshipConfig,
     getTotalReceived,
+    getTotalReceivedForAcademicYear,
     createTransaction,
     updateLedgerStatus,
     getSummary,

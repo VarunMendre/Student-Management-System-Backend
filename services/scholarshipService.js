@@ -359,7 +359,11 @@ const disburseScholarshipBatch = async (disbursements, actor = {}) => {
             });
 
             const maxAmount = parseFloat(config.max_amount);
-            const totalReceived = await scholarshipModel.getTotalReceived(client, student.ledger_id);
+            const totalReceived = await scholarshipModel.getTotalReceivedForAcademicYear(
+                client,
+                student_id,
+                academic_year_num
+            );
             if (totalReceived >= maxAmount) throw new CustomError({
                 message: `Limit reached (${maxAmount})`,
                 statusCode: 400,
