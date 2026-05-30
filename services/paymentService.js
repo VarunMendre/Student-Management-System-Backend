@@ -4,6 +4,30 @@ import paymentModel from "../models/paymentModel.js";
 import studentModel from "../models/studentModel.js";
 import { withTransaction } from "../utils/dbUtils.js";
 
+const calculateCascadingLedgers = (ledgers) => {
+    let carry = 0;
+    return ledgers.map(ledger => {
+        const totalFee = parseFloat(ledger.total_yearly_fee || 0);
+        const directPaid = parseFloat(ledger.total_paid || 0);
+        const effectivePaid = directPaid + carry;
+        const appliedToFee = Math.min(effectivePaid, totalFee);
+        const balance = totalFee - appliedToFee;
+        carry = effectivePaid - appliedToFee;
+
+        return {
+            ...ledger,
+            total_yearly_fee: totalFee,
+            total_paid: directPaid,
+            effective_paid: effectivePaid,
+            applied_to_fee: appliedToFee,
+            pending_fee: balance,
+            carry_out: carry,
+            carry_in: effectivePaid - directPaid,
+            status: balance <= 0 ? "Paid" : (effectivePaid > 0 ? "Partial" : "Pending")
+        };
+    });
+};
+
 const parseParticulars = (value) => {
     if (Array.isArray(value)) return value;
     if (!value) return [];
@@ -84,23 +108,10 @@ const createPayment = async (studentId, data) => {
         code: ErrorCodes.VALIDATION_ERROR
     });
 
-    const overCollectionFromPrev = await paymentModel.getOverCollectionForYear(studentId, ledger.academic_year_num);
-    const adjustedFee = Math.max(0, parseFloat(ledger.total_yearly_fee || 0) - overCollectionFromPrev);
-    const pendingFee = Math.max(0, adjustedFee - parseFloat(ledger.total_paid || 0));
     const receiptAmount = parseFloat(amount_paid);
     const appliedAmount = fee_applied_amount === undefined || fee_applied_amount === null
         ? receiptAmount
         : parseFloat(fee_applied_amount);
-
-    if (appliedAmount > pendingFee) throw new CustomError({
-        message: `Amount (${appliedAmount}) exceeds pending (${pendingFee})`,
-        statusCode: 400,
-        code: ErrorCodes.OVERPAYMENT,
-        details: {
-            amount_paid: appliedAmount,
-            pending_fee: pendingFee
-        }
-    });
 
     const receiptNumber = await generateReceiptNumber();
 
@@ -110,7 +121,7 @@ const createPayment = async (studentId, data) => {
         });
 
         const newTotalPaid = parseFloat(ledger.total_paid) + appliedAmount;
-        let status = newTotalPaid >= adjustedFee ? "Paid" : (newTotalPaid > 0 ? "Partial" : "Pending");
+        let status = newTotalPaid >= parseFloat(ledger.total_yearly_fee) ? "Paid" : (newTotalPaid > 0 ? "Partial" : "Pending");
 
         const updatedLedger = await paymentModel.updateLedgerTotalPaid(client, ledger_id, newTotalPaid, status);
 
@@ -126,7 +137,7 @@ const createPayment = async (studentId, data) => {
                 ...updatedLedger,
                 total_yearly_fee: parseFloat(updatedLedger.total_yearly_fee),
                 total_paid: parseFloat(updatedLedger.total_paid),
-                pending_fee: Math.max(0, adjustedFee - parseFloat(updatedLedger.total_paid))
+                pending_fee: Math.max(0, parseFloat(updatedLedger.total_yearly_fee) - parseFloat(updatedLedger.total_paid))
             }
         };
     }).catch(error => {
@@ -180,17 +191,16 @@ const getFeeLedger = async (studentId) => {
     });
 
     const ledger = await paymentModel.findFullLedgerByStudent(studentId);
-    const parsedLedger = ledger.map(row => ({
-        ...row, total_yearly_fee: parseFloat(row.total_yearly_fee), total_paid: parseFloat(row.total_paid), pending_fee: parseFloat(row.pending_fee)
-    }));
+    const parsedLedger = calculateCascadingLedgers(ledger);
 
     return {
         student_id: student.id, student_name: student.full_name, course_name: student.course_name,
         ledger: parsedLedger,
         summary: {
             total_course_fee: parsedLedger.reduce((sum, row) => sum + row.total_yearly_fee, 0),
-            total_paid: parsedLedger.reduce((sum, row) => sum + row.total_paid, 0),
-            total_pending: parsedLedger.reduce((sum, row) => sum + row.pending_fee, 0)
+            total_paid: parsedLedger.reduce((sum, row) => sum + row.applied_to_fee, 0),
+            total_pending: parsedLedger.reduce((sum, row) => sum + row.pending_fee, 0),
+            global_over_collection: parsedLedger.length > 0 ? parsedLedger[parsedLedger.length - 1].carry_out : 0
         }
     };
 };
@@ -216,39 +226,33 @@ const getStudentFeeOverview = async (studentId, academicYearNum) => {
         statusCode: 400,
         code: ErrorCodes.VALIDATION_ERROR
     });
-    const ledger = await paymentModel.getLedgerByStudentAndYearNum(studentId, yearNum);
-    if (!ledger) throw new CustomError({
+    const allLedgers = await paymentModel.findFullLedgerByStudent(studentId);
+    const cascadedLedgers = calculateCascadingLedgers(allLedgers);
+    const yearLedger = cascadedLedgers.find(l => l.academic_year_num === yearNum);
+
+    if (!yearLedger) throw new CustomError({
         message: "Ledger not found for year",
         statusCode: 404,
         code: ErrorCodes.NOT_FOUND
     });
 
-    const currentYearFee = parseFloat(ledger.total_yearly_fee || 0);
-    const ledgerTotalPaid = parseFloat(ledger.total_paid || 0);
-    const overCollectionFromPrev = await paymentModel.getOverCollectionForYear(studentId, yearNum);
-    const overCollectionDetails = await paymentModel.getOverCollectionDetailsForYear(studentId, yearNum);
-    const overCollectionCarriedForward = await paymentModel.getOverCollectionFromYear(studentId, yearNum);
-    const overCollectionCarryForwardDetails = await paymentModel.getOverCollectionDetailsFromYear(studentId, yearNum);
-    const adjustedFee = Math.max(0, currentYearFee - overCollectionFromPrev);
-    const pending = Math.max(0, adjustedFee - ledgerTotalPaid);
-    const effectiveTotalPaid = ledgerTotalPaid + overCollectionFromPrev;
-    const effectivePending = Math.max(0, currentYearFee - effectiveTotalPaid);
-
     return {
         academic_year_num: yearNum,
-        current_year_fee: currentYearFee,
-        over_collection_from_prev: overCollectionFromPrev,
-        over_collection_carried_forward: overCollectionCarriedForward,
-        adjusted_fee: adjustedFee,
-        ledger_total_paid: ledgerTotalPaid,
-        total_paid: effectiveTotalPaid,
-        effective_total_paid: effectiveTotalPaid,
-        pending,
-        effective_pending: effectivePending,
-        carry_in_credit: overCollectionFromPrev,
-        carried_forward_credit: overCollectionCarriedForward,
-        over_collection_details: overCollectionDetails,
-        over_collection_carry_forward_details: overCollectionCarryForwardDetails
+        current_year_fee: yearLedger.total_yearly_fee,
+        over_collection_from_prev: yearLedger.carry_in,
+        over_collection_carried_forward: yearLedger.carry_out,
+        adjusted_fee: yearLedger.total_yearly_fee,
+        ledger_total_paid: yearLedger.total_paid,
+        total_paid: yearLedger.effective_paid,
+        effective_total_paid: yearLedger.effective_paid,
+        pending: yearLedger.pending_fee,
+        effective_pending: yearLedger.pending_fee,
+        carry_in_credit: yearLedger.carry_in,
+        carried_forward_credit: yearLedger.carry_out,
+        applied_to_fee: yearLedger.applied_to_fee,
+        global_over_collection: cascadedLedgers[cascadedLedgers.length - 1].carry_out,
+        over_collection_details: [],
+        over_collection_carry_forward_details: []
     };
 };
 

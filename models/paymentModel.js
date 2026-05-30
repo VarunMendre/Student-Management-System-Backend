@@ -201,55 +201,10 @@ const getLedgerByStudentAndYearNum = async (studentId, yearNum) => {
     return rows[0] || null;
 };
 
-const getOverCollectionForYear = async (studentId, carriedToYearNum) => {
-    const [rows] = await pool.query(
-        `SELECT COALESCE(SUM(amount), 0) as total
-         FROM student_over_collection
-         WHERE student_id = ?
-           AND carried_to_academic_year_num = ?
-           AND is_refunded = FALSE`,
-        [studentId, carriedToYearNum]
-    );
-    return parseFloat(rows[0]?.total || 0);
-};
-
-const getOverCollectionDetailsForYear = async (studentId, carriedToYearNum) => {
-    const [rows] = await pool.query(
-        `SELECT from_academic_year_num as from_year, amount, source
-         FROM student_over_collection
-         WHERE student_id = ?
-           AND carried_to_academic_year_num = ?
-           AND is_refunded = FALSE
-         ORDER BY from_academic_year_num ASC, id ASC`,
-        [studentId, carriedToYearNum]
-    );
-    return rows.map((r) => ({ ...r, amount: parseFloat(r.amount || 0) }));
-};
-
-const getOverCollectionFromYear = async (studentId, fromYearNum) => {
-    const [rows] = await pool.query(
-        `SELECT COALESCE(SUM(amount), 0) as total
-         FROM student_over_collection
-         WHERE student_id = ?
-           AND from_academic_year_num = ?
-           AND is_refunded = FALSE`,
-        [studentId, fromYearNum]
-    );
-    return parseFloat(rows[0]?.total || 0);
-};
-
-const getOverCollectionDetailsFromYear = async (studentId, fromYearNum) => {
-    const [rows] = await pool.query(
-        `SELECT carried_to_academic_year_num as carried_to_year, amount, source
-         FROM student_over_collection
-         WHERE student_id = ?
-           AND from_academic_year_num = ?
-           AND is_refunded = FALSE
-         ORDER BY carried_to_academic_year_num ASC, id ASC`,
-        [studentId, fromYearNum]
-    );
-    return rows.map((r) => ({ ...r, amount: parseFloat(r.amount || 0) }));
-};
+const getOverCollectionForYear = async () => 0;
+const getOverCollectionDetailsForYear = async () => [];
+const getOverCollectionFromYear = async () => 0;
+const getOverCollectionDetailsFromYear = async () => [];
 
 const getFeeParticularsForLedger = async (ledgerId) => {
     const [rows] = await pool.query(
@@ -271,16 +226,7 @@ const getFeeParticularsForLedger = async (ledgerId) => {
     }));
 };
 
-const getOverCollectionHistory = async (studentId) => {
-    const [rows] = await pool.query(
-        `SELECT from_academic_year_num as from_year, carried_to_academic_year_num as carried_to_year, amount, source, is_refunded, refunded_at, created_at
-         FROM student_over_collection
-         WHERE student_id = ?
-         ORDER BY from_academic_year_num ASC, id ASC`,
-        [studentId]
-    );
-    return rows.map((r) => ({ ...r, amount: parseFloat(r.amount || 0) }));
-};
+const getOverCollectionHistory = async () => [];
 
 export default {
     findLedgerById,

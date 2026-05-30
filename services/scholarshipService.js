@@ -367,30 +367,19 @@ const disburseScholarshipBatch = async (disbursements, actor = {}) => {
 
             const requestedAmount = parseFloat(amount);
             const remainingLimit = Math.max(0, maxAmount - totalReceived);
-            const overCollectionFromPrev = await paymentModel.getOverCollectionForYear(student_id, academic_year_num);
-            const adjustedFee = Math.max(0, parseFloat(student.total_yearly_fee || 0) - overCollectionFromPrev);
-            const pendingFee = Math.max(0, adjustedFee - parseFloat(student.total_paid || 0));
             const approvedAmount = Math.min(requestedAmount, remainingLimit);
             if (approvedAmount <= 0) throw new CustomError({
-                message: pendingFee <= 0
-                    ? "No current-year fee balance; scholarship can only be booked as over-collection, but current limit is exhausted"
-                    : "No amount applicable (scholarship limit reached)",
+                message: "No amount applicable (scholarship limit reached)",
                 statusCode: 400,
                 code: ErrorCodes.OVERPAYMENT,
                 details: {
-                    reason: pendingFee <= 0 ? "fee_balance_zero" : "scholarship_limit_exhausted",
+                    reason: "scholarship_limit_exhausted",
                     max_amount: maxAmount,
                     total_received: totalReceived,
                     requested_amount: requestedAmount,
-                    remaining_limit: remainingLimit,
-                    current_year_fee: adjustedFee,
-                    total_paid: parseFloat(student.total_paid || 0),
-                    pending_fee: pendingFee
+                    remaining_limit: remainingLimit
                 }
             });
-
-            const appliedAmount = Math.min(approvedAmount, pendingFee);
-            const overCollectionAmount = Math.max(0, approvedAmount - appliedAmount);
 
             const receiptNumber = await generateReceiptNumber();
             const txn = await scholarshipModel.createTransaction(client, {
@@ -400,19 +389,10 @@ const disburseScholarshipBatch = async (disbursements, actor = {}) => {
                 appId: normalizedAppId, instNo: installment_no
             });
 
-            const newTotalPaid = parseFloat(student.total_paid) + appliedAmount;
-            const status = newTotalPaid >= adjustedFee ? "Paid" : (newTotalPaid > 0 ? "Partial" : "Pending");
+            const newTotalPaid = parseFloat(student.total_paid) + approvedAmount;
+            const status = newTotalPaid >= parseFloat(student.total_yearly_fee || 0) ? "Paid" : (newTotalPaid > 0 ? "Partial" : "Pending");
 
             await scholarshipModel.updateLedgerStatus(client, student.ledger_id, newTotalPaid, status);
-            if (overCollectionAmount > 0) {
-                await scholarshipModel.insertOverCollection(client, {
-                    studentId: student_id,
-                    fromYearNum: Number(academic_year_num),
-                    carryToYearNum: Number(academic_year_num) + 1,
-                    amount: overCollectionAmount,
-                    sourceTxnId: txn.id
-                });
-            }
 
             if (applicationRecord && applicationRecord.submission_status !== "approved") {
                 const approvedRecord = await scholarshipModel.markApplicationApproved(client, applicationRecord.id, actor.actorUserId || null);
@@ -433,8 +413,8 @@ const disburseScholarshipBatch = async (disbursements, actor = {}) => {
             return {
                 student_name: student.full_name,
                 amount_approved: approvedAmount,
-                amount_applied: appliedAmount,
-                over_collection: overCollectionAmount,
+                amount_applied: approvedAmount,
+                over_collection: 0,
                 receipt_number: txn.receipt_number,
                 application_id: normalizedAppId,
                 verification_status: applicationRecord ? applicationRecord.submission_status : "not_submitted"
