@@ -404,7 +404,7 @@ const disburseScholarshipBatch = async (disbursements, actor = {}) => {
                     details: {
                         reason: "disbursal_processed",
                         installment_no,
-                        amount_applied: appliedAmount,
+                        amount_applied: approvedAmount,
                         receipt_number: txn.receipt_number
                     }
                 });
