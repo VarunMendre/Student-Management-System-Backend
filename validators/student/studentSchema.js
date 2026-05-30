@@ -88,9 +88,16 @@ export const studentSchemas = {
             students: z.array(
                 z.object({
                     full_name: normalizedNameSchema,
-                    email: z.string().transform(normalizeEmail).pipe(z.string().regex(emailRegex, "Invalid email format").max(150)),
+                    email: z.union([
+                        z.string().min(1).transform(normalizeEmail).pipe(z.string().regex(emailRegex, "Invalid email format").max(150)),
+                        z.null(),
+                        z.literal("")
+                    ]).optional().transform(val => (val === "" ? null : val)),
                     mobile_number: z.string().transform(normalizePhone).pipe(z.string().regex(/^\d{10}$/, "Mobile number must be exactly 10 digits")),
-                    alternate_number: z.string().transform(normalizePhone).pipe(z.string().regex(/^\d{10}$/, "Alternate number must be exactly 10 digits")).optional().or(z.literal("")),
+                    alternate_number: z.preprocess(
+                        (val) => (val === null || val === undefined || val === '' ? undefined : String(val).replace(/\D/g, '')),
+                        z.string().regex(/^\d{10}$/, "Alternate number must be exactly 10 digits").optional()
+                    ),
                     caste_category: z.enum(STUDENT_CASTE_CATEGORIES, {
                         errorMap: () => ({ message: `Category must be one of: ${STUDENT_CASTE_CATEGORIES.join(", ")}` })
                     }),
@@ -109,8 +116,8 @@ export const studentSchemas = {
                     ),
                     prn_number: normalizedOptionalIdText.optional().or(z.literal("")),
                     eligibility_number: normalizedOptionalIdText.optional().or(z.literal("")),
-                    total_paid: z.number().min(0).default(0),
-                    balance: z.number().min(0).default(0)
+                    total_paid: z.preprocess((val) => (val === '' || val === null || val === undefined ? 0 : Number(val)), z.number().min(0).default(0)),
+                    balance: z.preprocess((val) => (val === '' || val === null || val === undefined ? 0 : Number(val)), z.number().min(0).default(0))
                 })
             ).min(1).max(500)
         })

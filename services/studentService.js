@@ -262,9 +262,9 @@ const bulkImportStudents = async (data) => {
         });
     }
 
-    // 3. Duplicate checks (Internal & External)
-    const emails = students.map(s => s.email);
-    const internalDuplicates = emails.filter((email, index) => emails.indexOf(email) !== index);
+    // 3. Duplicate checks (Internal & External) — only for students that have an email
+    const nonNullEmails = students.map(s => s.email).filter(e => e !== null && e !== undefined && e !== '');
+    const internalDuplicates = nonNullEmails.filter((email, index) => nonNullEmails.indexOf(email) !== index);
     if (internalDuplicates.length > 0) {
         throw new CustomError({
             message: `Duplicate emails found in the uploaded file: ${[...new Set(internalDuplicates)].join(", ")}`,
@@ -273,7 +273,7 @@ const bulkImportStudents = async (data) => {
         });
     }
 
-    const existingEmailsInDb = await studentModel.findExistingEmails(emails);
+    const existingEmailsInDb = nonNullEmails.length > 0 ? await studentModel.findExistingEmails(nonNullEmails) : [];
     if (existingEmailsInDb.length > 0) {
         throw new CustomError({
             message: `The following emails already exist in the system: ${existingEmailsInDb.join(", ")}`,

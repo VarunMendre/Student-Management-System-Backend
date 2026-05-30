@@ -74,11 +74,15 @@ const createUser = async ({ name, email, password, contact_number, role }) => {
 };
 
 const createStudentUser = async (connection, { name, email, password, contact_number, role, student_id, is_password_changed = false }) => {
+    // If student has no email, use their mobile number as the login email fallback
+    // This avoids NULL in a UNIQUE column and still gives the student a way to log in
+    const loginEmail = email || `${contact_number}@noemail.local`;
+
     // Note: mysql2/promise connection uses query the same way as pool
     const [result] = await connection.query(
         `INSERT INTO app_users (name, email, password, contact_number, role, student_id, is_password_changed)
          VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [name, email, password, contact_number, role, student_id, is_password_changed]
+        [name, loginEmail, password, contact_number, role, student_id, is_password_changed]
     );
     
     const [rows] = await connection.query(
