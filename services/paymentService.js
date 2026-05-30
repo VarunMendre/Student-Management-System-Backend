@@ -224,14 +224,14 @@ const getStudentFeeOverview = async (studentId, academicYearNum) => {
     });
 
     const currentYearFee = parseFloat(ledger.total_yearly_fee || 0);
-    const totalPaid = parseFloat(ledger.total_paid || 0);
+    const ledgerTotalPaid = parseFloat(ledger.total_paid || 0);
     const overCollectionFromPrev = await paymentModel.getOverCollectionForYear(studentId, yearNum);
     const overCollectionDetails = await paymentModel.getOverCollectionDetailsForYear(studentId, yearNum);
     const overCollectionCarriedForward = await paymentModel.getOverCollectionFromYear(studentId, yearNum);
     const overCollectionCarryForwardDetails = await paymentModel.getOverCollectionDetailsFromYear(studentId, yearNum);
     const adjustedFee = Math.max(0, currentYearFee - overCollectionFromPrev);
-    const pending = Math.max(0, adjustedFee - totalPaid);
-    const effectiveTotalPaid = totalPaid + overCollectionFromPrev;
+    const pending = Math.max(0, adjustedFee - ledgerTotalPaid);
+    const effectiveTotalPaid = ledgerTotalPaid + overCollectionFromPrev;
     const effectivePending = Math.max(0, currentYearFee - effectiveTotalPaid);
 
     return {
@@ -240,10 +240,13 @@ const getStudentFeeOverview = async (studentId, academicYearNum) => {
         over_collection_from_prev: overCollectionFromPrev,
         over_collection_carried_forward: overCollectionCarriedForward,
         adjusted_fee: adjustedFee,
-        total_paid: totalPaid,
+        ledger_total_paid: ledgerTotalPaid,
+        total_paid: effectiveTotalPaid,
         effective_total_paid: effectiveTotalPaid,
         pending,
         effective_pending: effectivePending,
+        carry_in_credit: overCollectionFromPrev,
+        carried_forward_credit: overCollectionCarriedForward,
         over_collection_details: overCollectionDetails,
         over_collection_carry_forward_details: overCollectionCarryForwardDetails
     };
