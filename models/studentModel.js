@@ -110,11 +110,11 @@ const createStudent = async (connection, data) => {
 };
 
 const createFeeLedger = async (connection, data) => {
-    const { student_id, academic_year, academic_year_num, total_yearly_fee } = data;
+    const { student_id, academic_year, academic_year_num, total_yearly_fee, total_paid = 0, status = "Pending" } = data;
     const [result] = await connection.query(
-        `INSERT INTO student_fee_ledger (student_id, academic_year, academic_year_num, total_yearly_fee)
-         VALUES (?, ?, ?, ?)`,
-        [student_id, academic_year, academic_year_num, total_yearly_fee]
+        `INSERT INTO student_fee_ledger (student_id, academic_year, academic_year_num, total_yearly_fee, total_paid, status)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [student_id, academic_year, academic_year_num, total_yearly_fee, total_paid, status]
     );
     
     const [rows] = await connection.query(

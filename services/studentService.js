@@ -240,7 +240,7 @@ const updateStudent = async (id, data) => {
 };
 
 const bulkImportStudents = async (data) => {
-    const { department_id, course_id, batch_id, students } = data;
+    const { department_id, course_id, batch_id, target_year, students } = data;
 
     // 1. Validate Batch/Course/Dept
     const batch = await studentModel.getBatchWithDetails(batch_id);
@@ -314,8 +314,33 @@ const bulkImportStudents = async (data) => {
             for (let i = 0; i < yearLabels.length; i++) {
                 const yr = yearLabels[i];
                 const yearlyFee = batchFees[yr] || 0;
+                
+                let finalYearlyFee = yearlyFee;
+                let finalPaid = 0;
+                let finalStatus = yearlyFee > 0 ? "Pending" : "Paid";
+
+                if (yr === target_year) {
+                    const importPaid = studentData.total_paid !== undefined ? parseFloat(studentData.total_paid) : 0;
+                    const importBalance = studentData.balance !== undefined ? parseFloat(studentData.balance) : 0;
+                    
+                    finalPaid = importPaid;
+                    finalYearlyFee = importPaid + importBalance;
+                    if (importBalance === 0) {
+                        finalStatus = "Paid";
+                    } else if (importPaid > 0) {
+                        finalStatus = "Partial";
+                    } else {
+                        finalStatus = "Pending";
+                    }
+                }
+
                 await studentModel.createFeeLedger(client, {
-                    student_id: student.id, academic_year: yr, academic_year_num: i + 1, total_yearly_fee: yearlyFee
+                    student_id: student.id,
+                    academic_year: yr,
+                    academic_year_num: i + 1,
+                    total_yearly_fee: finalYearlyFee,
+                    total_paid: finalPaid,
+                    status: finalStatus
                 });
             }
             importedStudents.push(student);

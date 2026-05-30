@@ -79,26 +79,38 @@ export const studentSchemas = {
         }).optional().default({})
     }),
 
-    // Schema for POST /api/v1/students/bulk-import
     bulkImport: z.object({
         body: z.object({
             department_id: z.number().int().positive().or(z.string().regex(idRegex).transform(Number)),
             course_id: z.number().int().positive().or(z.string().regex(idRegex).transform(Number)),
             batch_id: z.number().int().positive().or(z.string().regex(idRegex).transform(Number)),
+            target_year: z.string().min(2),
             students: z.array(
                 z.object({
                     full_name: normalizedNameSchema,
-                    email: normalizedEmailSchema,
-                    mobile_number: normalizedPhoneSchema,
-                    alternate_number: normalizedPhoneSchema,
+                    email: z.string().transform(normalizeEmail).pipe(z.string().regex(emailRegex, "Invalid email format").max(150)),
+                    mobile_number: z.string().transform(normalizePhone).pipe(z.string().regex(/^\d{10}$/, "Mobile number must be exactly 10 digits")),
+                    alternate_number: z.string().transform(normalizePhone).pipe(z.string().regex(/^\d{10}$/, "Alternate number must be exactly 10 digits")).optional().or(z.literal("")),
                     caste_category: z.enum(STUDENT_CASTE_CATEGORIES, {
                         errorMap: () => ({ message: `Category must be one of: ${STUDENT_CASTE_CATEGORIES.join(", ")}` })
                     }),
-                    gender: z.enum(STUDENT_GENDERS, {
-                        errorMap: () => ({ message: `Gender must be one of: ${STUDENT_GENDERS.join(", ")}` })
-                    }),
-                    prn_number: normalizedOptionalIdText,
-                    eligibility_number: normalizedOptionalIdText
+                    gender: z.preprocess(
+                        (val) => {
+                            if (typeof val === "string") {
+                                const upper = val.toUpperCase().trim();
+                                if (upper === "MALE") return "Male";
+                                if (upper === "FEMALE") return "Female";
+                            }
+                            return val;
+                        },
+                        z.enum(STUDENT_GENDERS, {
+                            errorMap: () => ({ message: "Gender must be MALE or FEMALE" })
+                        })
+                    ),
+                    prn_number: normalizedOptionalIdText.optional().or(z.literal("")),
+                    eligibility_number: normalizedOptionalIdText.optional().or(z.literal("")),
+                    total_paid: z.number().min(0).default(0),
+                    balance: z.number().min(0).default(0)
                 })
             ).min(1).max(500)
         })

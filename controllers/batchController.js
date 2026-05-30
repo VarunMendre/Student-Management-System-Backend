@@ -12,7 +12,7 @@ export const createBatch = asyncHandler(async (req, res) => {
 
 export const saveFees = asyncHandler(async (req, res) => {
     const { batch_id } = req.params;
-    const { components } = req.body;
+    const { components = [] } = req.body;
 
     const total = components.reduce((sum, item) => sum + parseFloat(item.amount || 0), 0);
 

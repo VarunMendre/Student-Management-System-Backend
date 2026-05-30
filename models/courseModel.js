@@ -16,8 +16,8 @@ const findAll = async () => {
                     SELECT 
                       course_id,
                       CASE 
-                        WHEN caste_category IN ('SC', 'ST', 'SC / ST') THEN 'scst'
-                        WHEN caste_category IN ('VJ', 'NT-A', 'NT-B', 'NT-C', 'NT-D', 'SBC', 'VJ / DT / NT / SBC') THEN 'vjnt'
+                        WHEN caste_category IN ('SC', 'ST', 'SC / ST', 'SC/ST') THEN 'scst'
+                        WHEN caste_category IN ('VJ', 'NT-A', 'NT-B', 'NT-C', 'NT-D', 'SBC', 'VJ / DT / NT / SBC', 'VJNT') THEN 'vjnt'
                         WHEN caste_category = 'OBC' THEN 'obc'
                         WHEN caste_category IN ('EWS', 'EBC', 'OPEN') THEN 'general'
                         WHEN caste_category = 'General' THEN 'general'
@@ -55,8 +55,8 @@ const findById = async (id) => {
                     SELECT 
                       course_id,
                       CASE 
-                        WHEN caste_category IN ('SC', 'ST', 'SC / ST') THEN 'scst'
-                        WHEN caste_category IN ('VJ', 'NT-A', 'NT-B', 'NT-C', 'NT-D', 'SBC', 'VJ / DT / NT / SBC') THEN 'vjnt'
+                        WHEN caste_category IN ('SC', 'ST', 'SC / ST', 'SC/ST') THEN 'scst'
+                        WHEN caste_category IN ('VJ', 'NT-A', 'NT-B', 'NT-C', 'NT-D', 'SBC', 'VJ / DT / NT / SBC', 'VJNT') THEN 'vjnt'
                         WHEN caste_category = 'OBC' THEN 'obc'
                         WHEN caste_category IN ('EWS', 'EBC', 'OPEN') THEN 'general'
                         WHEN caste_category = 'General' THEN 'general'

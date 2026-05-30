@@ -57,7 +57,7 @@ CREATE TABLE IF NOT EXISTS students (
     department_id       INTEGER NOT NULL,
     course_id           INTEGER NOT NULL,
     batch_id            INTEGER NOT NULL,
-    caste_category      ENUM('General', 'OBC', 'SC', 'ST', 'SBC', 'VJ', 'NT-A', 'NT-B', 'NT-C', 'NT-D', 'EWS') NOT NULL,
+    caste_category      ENUM('SC/ST', 'VJNT', 'OBC', 'EBC', 'OPEN') NOT NULL,
     gender              ENUM('Male', 'Female', 'Other') NOT NULL,
     enrollment_status   ENUM('Active', 'Inactive', 'Graduated', 'Dropped') DEFAULT 'Active',
     is_password_changed BOOLEAN DEFAULT FALSE,
@@ -131,7 +131,7 @@ CREATE TABLE IF NOT EXISTS fee_transactions (
 CREATE TABLE IF NOT EXISTS course_scholarship_config (
     id INT AUTO_INCREMENT PRIMARY KEY,
     course_id INTEGER,
-    caste_category ENUM('General', 'OBC', 'SC', 'ST', 'SBC', 'VJ', 'NT-A', 'NT-B', 'NT-C', 'NT-D', 'EWS') NOT NULL,
+    caste_category ENUM('SC/ST', 'VJNT', 'OBC', 'EBC', 'OPEN') NOT NULL,
     gender ENUM('Male', 'Female') NOT NULL,
     max_amount DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
     is_active BOOLEAN DEFAULT TRUE,

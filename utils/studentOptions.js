@@ -1,15 +1,9 @@
 export const STUDENT_CASTE_CATEGORIES = [
-    "General",
+    "SC/ST",
+    "VJNT",
     "OBC",
-    "SC",
-    "ST",
-    "SBC",
-    "VJ",
-    "NT-A",
-    "NT-B",
-    "NT-C",
-    "NT-D",
-    "EWS"
+    "EBC",
+    "OPEN"
 ];
 
 export const STUDENT_GENDERS = ["Male", "Female", "Other"];
