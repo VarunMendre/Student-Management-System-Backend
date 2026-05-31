@@ -444,7 +444,7 @@ const listApplicationsForAdmin = async () => {
                sa.form_path, sa.form_original_name, sa.match_status, sa.submission_status,
                sa.ocr_status, sa.ocr_error, sa.ocr_attempts, sa.last_ocr_at,
                sa.submitted_at, sa.approved_at, sa.rejected_at, sa.rejection_reason,
-               s.full_name, s.course_id, c.course_name
+               s.full_name, s.course_id, s.caste_category, s.gender, c.course_name
         FROM scholarship_applications sa
         JOIN students s ON s.id = sa.student_id
         JOIN courses c ON c.id = s.course_id
