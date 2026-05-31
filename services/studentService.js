@@ -286,10 +286,19 @@ const bulkImportStudents = async (data) => {
     const batchFees = await studentModel.getBatchFeesByYear(batch_id);
     const yearLabels = getAcademicYearLabels(batch.duration);
 
-    // 5. Transactional Import
+    // 5. Pre-hash ALL passwords in parallel BEFORE the transaction
+    //    bcrypt cost 10 = ~80ms per hash (vs cost 12 = ~300ms).
+    //    Parallel hashing: 24 students done in ~80ms total instead of ~7s sequential.
+    const hashedPasswords = await Promise.all(
+        students.map(s => bcrypt.hash(`${s.mobile_number}`, 10))
+    );
+
+    // 6. Transactional Import
     return withTransaction(async (client) => {
         const importedStudents = [];
-        for (const studentData of students) {
+        for (let idx = 0; idx < students.length; idx++) {
+            const studentData = students[idx];
+
             // Add required parent IDs
             const fullStudentData = {
                 ...studentData,
@@ -299,12 +308,11 @@ const bulkImportStudents = async (data) => {
             };
 
             const student = await studentModel.createStudent(client, fullStudentData);
-            const hashedPassword = await bcrypt.hash(`${studentData.mobile_number}`, 12);
 
             await userModel.createStudentUser(client, {
                 name: studentData.full_name,
                 email: studentData.email,
-                password: hashedPassword,
+                password: hashedPasswords[idx],
                 contact_number: studentData.mobile_number,
                 role: "student",
                 student_id: student.id,
