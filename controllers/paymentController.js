@@ -23,8 +23,8 @@ export const getFeeLedger = asyncHandler(async (req, res) => {
 });
 
 export const listAllTransactions = asyncHandler(async (req, res) => {
-    const { transactions, total } = await paymentService.getAllTransactions(req.query);
-    successResponse(res, { data: transactions, total }, "All transactions fetched successfully");
+    const { transactions, total, pagination } = await paymentService.getAllTransactions(req.query);
+    successResponse(res, { data: transactions, total, pagination }, "All transactions fetched successfully");
 });
 
 export const getStudentFeeOverview = asyncHandler(async (req, res) => {

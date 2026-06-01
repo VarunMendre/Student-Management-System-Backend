@@ -206,10 +206,26 @@ const getMyScholarshipApplication = async ({ actorUserId, requestOrigin }) => {
     return attachScholarshipFormUrls(application, requestOrigin);
 };
 
-const listStudentApplications = async ({ requestOrigin }) => {
-    const applications = await scholarshipModel.listApplicationsForAdmin();
-
-    return Promise.all(applications.map((application) => attachScholarshipFormUrls(application, requestOrigin)));
+const listStudentApplications = async ({ requestOrigin, page = 1, limit = 10 }) => {
+    const safePage = Number(page) > 0 ? Number(page) : 1;
+    const safeLimit = Number(limit) > 0 ? Number(limit) : 10;
+    const offset = (safePage - 1) * safeLimit;
+    const [applications, total] = await Promise.all([
+        scholarshipModel.listApplicationsForAdmin({ limit: safeLimit, offset }),
+        scholarshipModel.countApplicationsForAdmin()
+    ]);
+    const data = await Promise.all(applications.map((application) => attachScholarshipFormUrls(application, requestOrigin)));
+    return {
+        data,
+        pagination: {
+            page: safePage,
+            limit: safeLimit,
+            total,
+            totalPages: Math.ceil(total / safeLimit) || 1,
+            hasNext: safePage * safeLimit < total,
+            hasPrev: safePage > 1
+        }
+    };
 };
 
 const reconcileGovSheetRows = async ({ actorUserId, actorRole, rows = [] }) => {

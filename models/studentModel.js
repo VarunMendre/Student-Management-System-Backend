@@ -363,7 +363,7 @@ const syncStudentProfile = async (studentId, { full_name, email, mobile_number }
     return rows[0] || null;
 };
 
-const getFeeLedgerReport = async (filters = {}) => {
+const getFeeLedgerReport = async (filters = {}, pagination = {}) => {
     const baseQuery = `
         SELECT 
             s.id, s.full_name, s.email, s.prn_number,
@@ -393,12 +393,31 @@ const getFeeLedgerReport = async (filters = {}) => {
 
     const { whereClause, values } = buildStudentFilterParts(filters);
     const query = `${baseQuery}${whereClause} ORDER BY s.full_name ASC`;
-    
-    const [rows] = await pool.query(query, values);
+    const params = [...values];
+    let finalQuery = query;
+    if (pagination.limit !== undefined && pagination.offset !== undefined) {
+        finalQuery += ` LIMIT ? OFFSET ?`;
+        params.push(Number(pagination.limit), Number(pagination.offset));
+    }
+
+    const [rows] = await pool.query(finalQuery, params);
     return rows.map(row => ({
         ...row,
         fee_ledger: safeParseJsonArray(row.fee_ledger)
     }));
+};
+
+const countFeeLedgerReport = async (filters = {}) => {
+    const baseQuery = `
+        SELECT COUNT(*) as total
+        FROM students s
+        JOIN departments d ON s.department_id = d.id
+        JOIN courses c ON s.course_id = c.id
+        JOIN course_batches cb ON s.batch_id = cb.id
+    `;
+    const { whereClause, values } = buildStudentFilterParts(filters);
+    const [rows] = await pool.query(`${baseQuery}${whereClause}`, values);
+    return parseInt(rows[0]?.total || 0, 10);
 };
 
 const findStudents = async (filters = {}, pagination = {}) => {
@@ -535,6 +554,7 @@ export default {
     update,
     syncStudentProfile,
     getFeeLedgerReport,
+    countFeeLedgerReport,
     findStudents,
     countStudents,
     updateStudentById,

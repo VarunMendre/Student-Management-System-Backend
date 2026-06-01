@@ -74,9 +74,11 @@ const getApplicationFormUrl = asyncHandler(async (req, res) => {
 
 const listApplications = asyncHandler(async (req, res) => {
     const data = await scholarshipService.listStudentApplications({
+        page: req.query.page,
+        limit: req.query.limit,
         requestOrigin: `${req.protocol}://${req.get("host")}`
     });
-    successResponse(res, { data }, "Scholarship applications fetched successfully");
+    successResponse(res, data, "Scholarship applications fetched successfully");
 });
 
 const reconcile = asyncHandler(async (req, res) => {

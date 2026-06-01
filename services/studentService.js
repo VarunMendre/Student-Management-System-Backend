@@ -358,21 +358,41 @@ const bulkImportStudents = async (data) => {
 };
 
 const getFeeLedgerReport = async (filters = {}) => {
-    const initialRows = await studentModel.getFeeLedgerReport(filters);
+    const safePage = parsePaginationValue(filters.page, 1);
+    const safeLimit = parsePaginationValue(filters.limit, 10);
+    const offset = (safePage - 1) * safeLimit;
+    const queryFilters = {
+        ...filters,
+        page: undefined,
+        limit: undefined
+    };
+
+    const initialRows = await studentModel.getFeeLedgerReport(queryFilters, { limit: safeLimit, offset });
 
     await Promise.all(
         initialRows.map((row) => studentModel.syncLedgerFeesFromBatch(row.id))
     );
 
-    const rows = await studentModel.getFeeLedgerReport(filters);
+    const rows = await studentModel.getFeeLedgerReport(queryFilters, { limit: safeLimit, offset });
+    const total = await studentModel.countFeeLedgerReport(queryFilters);
 
-    return rows.map((row) => ({
+    return {
+        data: rows.map((row) => ({
         ...row,
         total_course_fee: parseFloat(row.total_course_fee),
         total_paid: parseFloat(row.total_paid),
         total_pending: parseFloat(row.total_pending),
         fee_ledger: parseLedgerFields(Array.isArray(row.fee_ledger) ? row.fee_ledger : [])
-    }));
+        })),
+        pagination: {
+            page: safePage,
+            limit: safeLimit,
+            total,
+            totalPages: Math.ceil(total / safeLimit) || 1,
+            hasNext: safePage * safeLimit < total,
+            hasPrev: safePage > 1
+        }
+    };
 };
 
 export default { 

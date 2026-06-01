@@ -42,11 +42,15 @@ export const bulkImportStudents = asyncHandler(async (req, res) => {
 });
 
 export const getFeeLedgerReport = asyncHandler(async (req, res) => {
-    const { department_id, course_id, batch_id } = req.query;
+    const { department_id, course_id, batch_id, page, limit, search, status } = req.query;
     const result = await studentService.getFeeLedgerReport({
         department_id,
         course_id,
-        batch_id
+        batch_id,
+        page,
+        limit,
+        search,
+        status
     });
     successResponse(res, result, "Fee ledger report fetched successfully");
 });

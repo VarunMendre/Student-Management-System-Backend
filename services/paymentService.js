@@ -206,12 +206,26 @@ const getFeeLedger = async (studentId) => {
 };
 
 const getAllTransactions = async (filters = {}) => {
-    const { transactions, total } = await paymentModel.findAllTransactions(filters);
+    const safePage = Number(filters.page || 1) > 0 ? Number(filters.page) : 1;
+    const safeLimit = Number(filters.limit || 10) > 0 ? Number(filters.limit) : 10;
+    const offset = (safePage - 1) * safeLimit;
+    const { transactions, total } = await paymentModel.findAllTransactions({ ...filters, page: undefined, limit: undefined }, { limit: safeLimit, offset });
     const rows = transactions.map(row => ({
         ...row,
         paidAmount: parseFloat(row.paidAmount || 0)
     }));
-    return { transactions: rows, total };
+    return {
+        transactions: rows,
+        total,
+        pagination: {
+            page: safePage,
+            limit: safeLimit,
+            total,
+            totalPages: Math.ceil(total / safeLimit) || 1,
+            hasNext: safePage * safeLimit < total,
+            hasPrev: safePage > 1
+        }
+    };
 };
 
 const getStudentFeeOverview = async (studentId, academicYearNum) => {

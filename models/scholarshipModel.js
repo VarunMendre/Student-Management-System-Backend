@@ -438,8 +438,8 @@ const getStudentApplicationByStudentAndCycle = async (studentId, _academicCycle 
     return rows[0] || null;
 };
 
-const listApplicationsForAdmin = async () => {
-    const [rows] = await pool.query(`
+const listApplicationsForAdmin = async (pagination = {}) => {
+    let sql = `
         SELECT sa.id, sa.student_id, sa.academic_cycle, sa.application_id, sa.application_id_extracted,
                sa.form_path, sa.form_original_name, sa.match_status, sa.submission_status,
                sa.ocr_status, sa.ocr_error, sa.ocr_attempts, sa.last_ocr_at,
@@ -449,8 +449,24 @@ const listApplicationsForAdmin = async () => {
         JOIN students s ON s.id = sa.student_id
         JOIN courses c ON c.id = s.course_id
         ORDER BY sa.submitted_at DESC
-    `);
+    `;
+    const params = [];
+    if (pagination.limit !== undefined && pagination.offset !== undefined) {
+        sql += ` LIMIT ? OFFSET ?`;
+        params.push(Number(pagination.limit), Number(pagination.offset));
+    }
+    const [rows] = await pool.query(sql, params);
     return rows;
+};
+
+const countApplicationsForAdmin = async () => {
+    const [rows] = await pool.query(`
+        SELECT COUNT(*) as total
+        FROM scholarship_applications sa
+        JOIN students s ON s.id = sa.student_id
+        JOIN courses c ON c.id = s.course_id
+    `);
+    return parseInt(rows[0]?.total || 0, 10);
 };
 
 const getPendingApplicationsByCycle = async (_academicCycle = null) => {
@@ -568,6 +584,7 @@ export default {
     createScholarshipAuditLog,
     getStudentApplicationByStudentAndCycle,
     listApplicationsForAdmin,
+    countApplicationsForAdmin,
     getPendingApplicationsByCycle,
     getApplicationsByIdsAndCycle,
     markApplicationApproved,
